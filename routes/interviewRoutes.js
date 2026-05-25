@@ -435,7 +435,7 @@ router.post("/submit-answer", authMiddleware, async (req, res) => {
       const q = session.questions[questionIndex];
       q.answer = answer;
       q.timestamp = new Date();
-
+      console.log("tech interview answer: ", answer);
       const evaluation = await evaluateAnswer(q.question, answer, q.category);
       q.score = evaluation.score;
       q.feedback = evaluation.feedback;
