@@ -146,10 +146,10 @@ router.get("/", authMiddleware, async (req, res) => {
     // Communication
     commSessions.forEach((s) => {
       const cat = `communication_${s.moduleType || "general"}`;
-      console.log("module tye", topicMap, " - ", cat);
+      // console.log("module tye", topicMap, " - ", cat);
       if (!topicMap[cat])
         topicMap[cat] = { topic: cat, count: 0, lastPracticed: new Date() };
-      console.log("moduleType in comm: ", topicMap[cat]);
+      // console.log("moduleType in comm: ", topicMap[cat]);
       topicMap[cat].count++;
     });
 
