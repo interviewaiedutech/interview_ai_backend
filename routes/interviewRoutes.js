@@ -195,12 +195,12 @@ const safeParseJSON = (text) => {
 const evaluateAnswer = async (question, answer, category) => {
   const prompt = `Evaluate this interview answer and return JSON only.
 
-Question: ${question}
-Category: ${category}
-Answer: ${answer}
+      Question: ${question}
+      Category: ${category}
+      Answer: ${answer}
 
-Return exactly this JSON:
-{"score": <number 10-20>, "feedback": "<one sentence under 20 words>"}`;
+      Return exactly this JSON:
+      {"score": <number 10-20>, "feedback": "<one sentence under 20 words>"}`;
 
   try {
     const text = await callFreeAI(prompt, true);
@@ -233,24 +233,82 @@ const generateQuestionsWithAI = async (
     ? technologyStack.join(", ")
     : "General";
 
-  const prompt = `Generate 5 interview questions for a ${experienceLevel} ${role} developer who knows: ${techStr}.
+  //   const prompt = `Generate 5 interview questions for a ${experienceLevel} ${role} developer who knows: ${techStr}.
 
-Return exactly this JSON (no other text)
-STRICT RULES:
-1. Every question MUST be an object.
-2. Do NOT return plain strings.
-3. Do NOT add explanations outside JSON.
-4. JSON must be valid and parsable.
-required format:
-{
-  "questions": [
-    {"text": "<technical question>", "category": "technical"},
-    {"text": "<technical question about their stack>", "category": "technical"},
-    {"text": "<HR behavioral question>", "category": "hr"},
-    {"text": "<coding challenge question>", "category": "coding"},
-    {"text": "<scenario based question>", "category": "scenario"}
-  ]
-}`;
+  // Return exactly this JSON (no other text)
+  // STRICT RULES:
+  // 1. Every question MUST be an object.
+  // 2. Do NOT return plain strings.
+  // 3. Do NOT add explanations outside JSON.
+  // 4. JSON must be valid and parsable.
+  // required format:
+  // {
+  //   "questions": [
+  //     {"text": "<technical question>", "category": "technical"},
+  //     {"text": "<technical question about their stack>", "category": "technical"},
+  //     {"text": "<HR behavioral question>", "category": "hr"},
+  //     {"text": "<coding challenge question>", "category": "coding"},
+  //     {"text": "<scenario based question>", "category": "scenario"}
+  //   ]
+  // }`;
+  const randomSeed = Math.floor(Math.random() * 100000);
+
+  const randomDifficulty = ["easy", "medium", "hard"][
+    Math.floor(Math.random() * 3)
+  ];
+
+  const randomStyle = [
+    "real world",
+    "debugging",
+    "optimization",
+    "architecture",
+    "behavioral",
+    "practical implementation",
+  ][Math.floor(Math.random() * 6)];
+
+  const prompt = `
+      Generate 5 UNIQUE interview questions.
+
+      Candidate:
+      - Role: ${role}
+      - Experience: ${experienceLevel}
+      - Technologies: ${techStr}
+
+      Requirements:
+      - Difficulty: ${randomDifficulty}
+      - Focus style: ${randomStyle}
+      - Questions must differ every request.
+      - Avoid generic repeated questions.
+      - Include practical industry scenarios.
+      - Use random seed ${randomSeed}
+
+      Return ONLY valid JSON.
+
+      {
+        "questions": [
+          {
+            "text": "<question>",
+            "category": "technical"
+          },
+          {
+            "text": "<question>",
+            "category": "technical"
+          },
+          {
+            "text": "<question>",
+            "category": "hr"
+          },
+          {
+            "text": "<question>",
+            "category": "coding"
+          },
+          {
+            "text": "<question>",
+            "category": "scenario"
+          }
+        ]
+      }
+    `;
 
   const text = await callFreeAI(prompt, true);
   const parsed = safeParseJSON(text);

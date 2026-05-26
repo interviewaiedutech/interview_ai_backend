@@ -202,35 +202,128 @@ router.post("/process", authMiddleware, async (req, res) => {
     await session.save();
 
     // IMPROVED PROMPT - Strictly control category values
-    const prompt = `You are an expert technical recruiter.
+    //     const prompt = `You are an expert technical recruiter.
 
-Job Description:
-${jobDescription}
+    // Job Description:
+    // ${jobDescription}
 
-Return ONLY valid JSON in this exact format. Do not use any other category names.
+    // Return ONLY valid JSON in this exact format. Do not use any other category names.
 
-{
-  "skills": ["React.js", "Leadership", "Problem Solving", "Communication", ...],
-  "questions": [
-    {
-      "question": "Question text here",
-      "category": "technical",
-      "difficulty": "Medium",
-      "importance": "Brief reason why this question is asked"
-    }
-  ]
-}
+    // {
+    //   "skills": ["React.js", "Leadership", "Problem Solving", "Communication", ...],
+    //   "questions": [
+    //     {
+    //       "question": "Question text here",
+    //       "category": "technical",
+    //       "difficulty": "Medium",
+    //       "importance": "Brief reason why this question is asked"
+    //     }
+    //   ]
+    // }
 
-Rules:
-- Use ONLY these categories: technical, behavioral, experience, situational, role-specific, general
-- Do not use "soft" or "soft-skills" as category.
-- Generate 8 to 12 high-quality questions differently.
-- Extract both technical and soft skills in the skills array.`;
+    // Rules:
+    // - Use ONLY these categories: technical, behavioral, experience, situational, role-specific, general
+    // - Do not use "soft" or "soft-skills" as category.
+    // - Generate 8 to 12 high-quality questions differently.
+    // - Extract both technical and soft skills in the skills array.`;
+    const randomSeed = Math.floor(Math.random() * 100000);
 
+    const interviewStyles = [
+      "real-world practical",
+      "problem-solving",
+      "system design",
+      "debugging",
+      "behavioral",
+      "scenario-based",
+      "architecture-focused",
+      "performance optimization",
+    ];
+
+    const companies = [
+      "Google",
+      "Amazon",
+      "Microsoft",
+      "Netflix",
+      "Startup",
+      "Product Based Company",
+    ];
+
+    const randomStyle =
+      interviewStyles[Math.floor(Math.random() * interviewStyles.length)];
+
+    const randomCompany =
+      companies[Math.floor(Math.random() * companies.length)];
+
+    const difficultyMix = ["Easy", "Medium", "Hard"]
+      .sort(() => Math.random() - 0.5)
+      .join(", ");
+
+    const prompt = `
+      You are an expert technical recruiter.
+
+      Job Description:
+      ${jobDescription}
+
+      IMPORTANT REQUIREMENTS:
+      - Generate UNIQUE questions every time.
+      - Avoid repeating common interview questions.
+      - Simulate ${randomCompany} interview style.
+      - Focus on ${randomStyle} questions.
+      - Use varied difficulty levels.
+      - Include practical real-world scenarios.
+      - Use random seed: ${randomSeed}
+      - Question difficulties should include: ${difficultyMix}
+
+      Return ONLY valid JSON in this exact format.
+
+      {
+        "skills": [
+          "React.js",
+          "Leadership",
+          "Problem Solving",
+          "Communication"
+        ],
+
+        "questions": [
+          {
+            "question": "Question text here",
+            "category": "technical",
+            "difficulty": "Medium",
+            "importance": "Brief reason why this question is asked"
+          }
+        ]
+      }
+
+      STRICT RULES:
+      - Use ONLY these categories:
+        technical,
+        behavioral,
+        experience,
+        situational,
+        role-specific,
+        general
+
+      - Do NOT use:
+        soft,
+        soft-skills,
+        other
+
+      - Generate 8 to 12 questions.
+      - Questions must differ every request.
+      - Include both technical and behavioral evaluation.
+      - Avoid duplicate concepts.
+      - Include beginner and advanced questions.
+      - Include implementation-focused questions.
+      - Include debugging or optimization questions.
+      - Extract both technical and soft skills in skills array.
+
+      Return ONLY JSON.
+      `;
     // const aiResponse = await callFreeAI(prompt, true);
     // const parsed = safeParseJSON(aiResponse);
 
     // if (!parsed) throw new Error("Failed to parse AI response");
+
     let parsed = null;
 
     try {

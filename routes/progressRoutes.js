@@ -10,6 +10,56 @@ const authMiddleware = require("../middleware/auth");
 
 const router = express.Router();
 
+const getCurrentWeekRange = () => {
+  const now = new Date();
+
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay());
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+  endOfWeek.setHours(23, 59, 59, 999);
+
+  return { startOfWeek, endOfWeek };
+};
+
+const buildWeeklyAnalytics = (sessions) => {
+  const { startOfWeek, endOfWeek } = getCurrentWeekRange();
+
+  const weeklySessions = sessions.filter((s) => {
+    const d = new Date(s.completedAt);
+
+    return d >= startOfWeek && d <= endOfWeek;
+  });
+
+  return {
+    totalSessions: weeklySessions.length,
+
+    aptitudeSessions: weeklySessions.filter((s) => s.module === "aptitude")
+      .length,
+
+    communicationSessions: weeklySessions.filter(
+      (s) => s.module === "communication",
+    ).length,
+
+    technicalSessions: weeklySessions.filter((s) => s.module === "technical")
+      .length,
+
+    emailSessions: weeklySessions.filter((s) => s.module === "email").length,
+
+    jdprepSessions: weeklySessions.filter((s) => s.module === "jdprep").length,
+
+    avgScore:
+      weeklySessions.length > 0
+        ? Math.round(
+            weeklySessions.reduce((sum, s) => sum + (s.score || 0), 0) /
+              weeklySessions.length,
+          )
+        : 0,
+  };
+};
+
 // GET User Progress (Aggregated from ALL modules)
 router.get("/", authMiddleware, async (req, res) => {
   try {
@@ -418,6 +468,7 @@ router.get("/", authMiddleware, async (req, res) => {
     // ============================================
 
     const recentSessions = allSessions.slice(0, 5);
+    const weeklyAnalytics = buildWeeklyAnalytics(allSessions);
     await progress.save();
 
     res.json({
@@ -431,6 +482,7 @@ router.get("/", authMiddleware, async (req, res) => {
         recentSessions,
         allSessions,
         moduleStats,
+        weeklyAnalytics,
         // Module-wise breakdown
         technical: { sessions: totalTechSessions, avgScore: techAvgScore },
         communication: { sessions: totalCommSessions, avgScore: commAvgScore },
