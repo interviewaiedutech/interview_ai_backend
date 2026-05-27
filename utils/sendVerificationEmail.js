@@ -1,16 +1,32 @@
 const nodemailer = require("nodemailer");
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
+// const transporter = nodemailer.createTransport({
+//   service: "gmail",
 
+//   auth: {
+//     user: process.env.EMAIL_USER,
+//     pass: process.env.EMAIL_PASS,
+//   },
+
+//   tls: {
+//     rejectUnauthorized: false,
+//   },
+// });
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com", // Better than using "service: gmail"
+  port: 587,
+  secure: false, // Use STARTTLS
+  requireTLS: true,
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    pass: process.env.EMAIL_PASS, // Must be App Password
   },
-
   tls: {
     rejectUnauthorized: false,
   },
+  connectionTimeout: 10000, // 10 seconds
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
 });
 
 const sendVerificationEmail = async (email, verificationLink) => {
