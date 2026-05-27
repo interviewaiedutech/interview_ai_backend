@@ -1,36 +1,43 @@
 const nodemailer = require("nodemailer");
 
-// const transporter = nodemailer.createTransport({
-//   service: "gmail",
+const { google } = require("googleapis");
 
-//   auth: {
-//     user: process.env.EMAIL_USER,
-//     pass: process.env.EMAIL_PASS,
-//   },
+const OAuth2 = google.auth.OAuth2;
 
-//   tls: {
-//     rejectUnauthorized: false,
-//   },
-// });
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com", // Better than using "service: gmail"
-  port: 587,
-  secure: false, // Use STARTTLS
-  requireTLS: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS, // Must be App Password
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-  connectionTimeout: 10000, // 10 seconds
-  greetingTimeout: 10000,
-  socketTimeout: 15000,
+const oauth2Client = new OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+
+  process.env.GOOGLE_CLIENT_SECRET,
+
+  "https://developers.google.com/oauthplayground",
+);
+
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
 });
 
 const sendVerificationEmail = async (email, verificationLink) => {
   try {
+    const accessToken = await oauth2Client.getAccessToken();
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+
+      auth: {
+        type: "OAuth2",
+
+        user: process.env.EMAIL_USER,
+
+        clientId: process.env.GOOGLE_CLIENT_ID,
+
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+
+        refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
+
+        accessToken: accessToken.token,
+      },
+    });
+
     const info = await transporter.sendMail({
       from: `"InterviewAI" <${process.env.EMAIL_USER}>`,
 
@@ -39,58 +46,39 @@ const sendVerificationEmail = async (email, verificationLink) => {
       subject: "Verify Your Email",
 
       html: `
-          <div
-            style="
-              font-family: Arial, sans-serif;
-              max-width: 600px;
-              margin: auto;
-              padding: 20px;
-            "
-          >
-
-            <h2>
-              Verify Your Email
-            </h2>
-
-            <p>
-              Thank you for registering.
-            </p>
-
-            <p>
-              Click the button below
-              to verify your account.
-            </p>
-
-            <a
-              href="${verificationLink}"
+            <div
               style="
-                display:inline-block;
-                padding:12px 20px;
-                background:#4f46e5;
-                color:white;
-                text-decoration:none;
-                border-radius:6px;
-                margin-top:10px;
+                font-family:sans-serif;
               "
             >
-              Verify Email
-            </a>
 
-            <p
-              style="
-                margin-top:20px;
-                font-size:14px;
-                color:#666;
-              "
-            >
-              This link expires in 1 day.
-            </p>
+              <h2>
+                Email Verification
+              </h2>
 
-          </div>
-        `,
+              <p>
+                Click below to verify your account.
+              </p>
+
+              <a
+                href="${verificationLink}"
+                style="
+                  display:inline-block;
+                  padding:12px 20px;
+                  background:#4f46e5;
+                  color:white;
+                  text-decoration:none;
+                  border-radius:6px;
+                "
+              >
+                Verify Email
+              </a>
+
+            </div>
+          `,
     });
 
-    console.log("✅ Verification email sent:", info.response);
+    console.log("✅ Email sent:", info.response);
   } catch (error) {
     console.error("❌ Email send error:", error);
 
