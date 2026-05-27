@@ -23,13 +23,11 @@ passport.use(
         if (!user) {
           user = await User.create({
             googleId: profile.id,
-
             name: profile.displayName,
-
             email: profile.emails[0].value,
-
             profilePicture: profile.photos[0].value,
-
+            isVerified: true,
+            provider: "google",
             password: "Oauthuser@123",
           });
         }
@@ -68,7 +66,8 @@ passport.use(
             name: profile.displayName || profile.username,
 
             email,
-
+            isVerified: true,
+            provider: "github",
             profilePicture: profile.photos?.[0]?.value || "",
 
             password: Math.random().toString(36).slice(-12),

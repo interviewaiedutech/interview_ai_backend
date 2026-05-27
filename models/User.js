@@ -19,6 +19,15 @@ const userSchema = new mongoose.Schema({
     type: String,
     minlength: [6, "Password must be at least 6 characters"],
   },
+  isVerified: {
+    type: Boolean,
+    default: false,
+  },
+  provider: {
+    type: String,
+    enum: ["local", "google", "github"],
+    default: "local",
+  },
   role: {
     type: String,
     enum: [

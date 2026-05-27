@@ -1,4 +1,5 @@
 // Import required packages
+require("dns").setDefaultResultOrder("ipv4first");
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");

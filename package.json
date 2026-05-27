@@ -21,6 +21,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongodb": "4.1",
     "mongoose": "^9.6.1",
+    "nodemailer": "^8.0.9",
     "openai": "^6.36.0",
     "passport": "^0.7.0",
     "passport-github2": "^0.1.12",

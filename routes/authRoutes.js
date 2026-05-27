@@ -1,6 +1,7 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const sendVerificationEmail = require("../utils/sendVerificationEmail");
 const passport = require("passport");
 const router = express.Router();
 
@@ -9,60 +10,235 @@ router.post("/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    // Validate required fields
     if (!name || !email || !password) {
       return res.status(400).json({
-        message: "Please provide name, email and password",
+        message: "Please provide all fields",
       });
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({
+      email,
+    });
+
     if (existingUser) {
       return res.status(400).json({
-        message: "User already exists with this email",
+        message: "User already exists",
       });
     }
 
-    // Create new user with default values for role, experienceLevel, technologyStack
     const user = new User({
       name,
+
       email,
+
       password,
-      role: "Frontend Developer", // Default role
-      experienceLevel: "Beginner", // Default experience level
-      technologyStack: [], // Empty array by default
+
+      role: "Frontend Developer",
+
+      experienceLevel: "Beginner",
+
+      technologyStack: [],
+
+      provider: "local",
+
+      isVerified: false,
     });
 
     await user.save();
 
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET || "secretkey",
-      { expiresIn: "7d" },
+    const verificationToken = jwt.sign(
+      {
+        userId: user._id,
+      },
+
+      process.env.JWT_SECRET,
+
+      {
+        expiresIn: "1d",
+      },
     );
 
-    // Return user info and token (exclude password)
+    const verificationLink = `${process.env.CLIENT_URL}/verify-email/${verificationToken}`;
+
+    await sendVerificationEmail(user.email, verificationLink);
+
     res.status(201).json({
-      message: "Registration successful",
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        experienceLevel: user.experienceLevel,
-        technologyStack: user.technologyStack,
-      },
+      success: true,
+
+      message: "Registration successful. Please verify your email.",
     });
   } catch (error) {
     console.error("Registration error:", error);
+
     res.status(500).json({
+      success: false,
+
       message: "Server error during registration",
     });
   }
 });
+// router.post("/register", async (req, res) => {
+//   try {
+//     const { name, email, password } = req.body;
+
+//     // Validate required fields
+//     if (!name || !email || !password) {
+//       return res.status(400).json({
+//         message: "Please provide name, email and password",
+//       });
+//     }
+
+//     // Check if user already exists
+//     const existingUser = await User.findOne({ email });
+//     if (existingUser) {
+//       return res.status(400).json({
+//         message: "User already exists with this email",
+//       });
+//     }
+
+//     // Create new user with default values for role, experienceLevel, technologyStack
+//     const user = new User({
+//       name,
+//       email,
+//       password,
+//       role: "Frontend Developer", // Default role
+//       experienceLevel: "Beginner", // Default experience level
+//       technologyStack: [], // Empty array by default
+//     });
+
+//     await user.save();
+
+//     // Generate JWT token
+//     const token = jwt.sign(
+//       { userId: user._id },
+//       process.env.JWT_SECRET || "secretkey",
+//       { expiresIn: "7d" },
+//     );
+
+//     // Return user info and token (exclude password)
+//     res.status(201).json({
+//       message: "Registration successful",
+//       token,
+//       user: {
+//         id: user._id,
+//         name: user.name,
+//         email: user.email,
+//         role: user.role,
+//         experienceLevel: user.experienceLevel,
+//         technologyStack: user.technologyStack,
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Registration error:", error);
+//     res.status(500).json({
+//       message: "Server error during registration",
+//     });
+//   }
+// });
+
+router.get(
+  "/verify-email/:token",
+
+  async (req, res) => {
+    try {
+      const decoded = jwt.verify(req.params.token, process.env.JWT_SECRET);
+
+      const user = await User.findById(decoded.userId);
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+
+          message: "User not found",
+        });
+      }
+
+      if (user.isVerified) {
+        return res.json({
+          success: true,
+
+          message: "Email already verified",
+        });
+      }
+
+      user.isVerified = true;
+
+      await user.save();
+
+      return res.json({
+        success: true,
+
+        message: "Email verified successfully",
+      });
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+
+        message: "Invalid or expired token",
+      });
+    }
+  },
+);
+
+router.post(
+  "/resend-verification",
+
+  async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      const user = await User.findOne({
+        email,
+      });
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+
+          message: "User not found",
+        });
+      }
+
+      if (user.isVerified) {
+        return res.status(400).json({
+          success: false,
+
+          message: "Email already verified",
+        });
+      }
+
+      const verificationToken = jwt.sign(
+        {
+          userId: user._id,
+        },
+
+        process.env.JWT_SECRET,
+
+        {
+          expiresIn: "1d",
+        },
+      );
+
+      const verificationLink = `${process.env.CLIENT_URL}/verify-email/${verificationToken}`;
+
+      await sendVerificationEmail(user.email, verificationLink);
+
+      return res.json({
+        success: true,
+
+        message: "Verification email resent",
+      });
+    } catch (error) {
+      console.error(error);
+
+      return res.status(500).json({
+        success: false,
+
+        message: "Failed to resend verification email",
+      });
+    }
+  },
+);
 
 // LOGIN - Authenticate existing user
 router.post("/login", async (req, res) => {
@@ -89,6 +265,14 @@ router.post("/login", async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({
         message: "Invalid email or password",
+      });
+    }
+
+    if (!user.isVerified && user.provider === "local") {
+      return res.status(401).json({
+        success: false,
+
+        message: "Please verify your email first",
       });
     }
 
