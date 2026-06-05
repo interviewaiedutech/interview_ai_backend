@@ -2,6 +2,7 @@ const express = require("express");
 const InterviewSession = require("../models/InterviewSession");
 const User = require("../models/User");
 const authMiddleware = require("../middleware/auth");
+const AIAnalytics = require("../models/AIAnalytics");
 const router = express.Router();
 
 // ============================================
@@ -149,7 +150,11 @@ const generateWithGitHub = async (prompt, isJson = true) => {
 // ============================================
 // UNIFIED AI CALL — tries each free provider
 // ============================================
-const callFreeAI = async (prompt, isJson = true) => {
+const callFreeAI = async (
+  prompt,
+  isJson = true,
+  moduleName = "Technical Interview",
+) => {
   const providers = [];
 
   if (groqClient)
@@ -167,11 +172,25 @@ const callFreeAI = async (prompt, isJson = true) => {
 
   for (const provider of providers) {
     try {
-      console.log(`Trying ${provider.name}...`);
+      console.log(`Trying ${provider.name} for interview...`);
+      const start = Date.now();
       const result = await provider.fn();
+      const end = Date.now();
+      await AIAnalytics.create({
+        provider: provider.name,
+        module: moduleName,
+        success: true,
+        responseTime: end - start,
+      });
       console.log(`✅ Success via ${provider.name}`);
       return result;
     } catch (err) {
+      await AIAnalytics.create({
+        provider: provider.name,
+        module: moduleName,
+        success: false,
+        responseTime: 0,
+      });
       console.log(`⚠️ ${provider.name} failed: ${err.message}`);
     }
   }
@@ -203,7 +222,11 @@ const evaluateAnswer = async (question, answer, category) => {
       {"score": <number 10-20>, "feedback": "<one sentence under 20 words>"}`;
 
   try {
-    const text = await callFreeAI(prompt, true);
+    const text = await callFreeAI(
+      prompt,
+      true,
+      "Technical Interview Evaluation",
+    );
     const parsed = safeParseJSON(text);
     if (parsed && typeof parsed.score === "number") {
       return {
@@ -233,24 +256,6 @@ const generateQuestionsWithAI = async (
     ? technologyStack.join(", ")
     : "General";
 
-  //   const prompt = `Generate 5 interview questions for a ${experienceLevel} ${role} developer who knows: ${techStr}.
-
-  // Return exactly this JSON (no other text)
-  // STRICT RULES:
-  // 1. Every question MUST be an object.
-  // 2. Do NOT return plain strings.
-  // 3. Do NOT add explanations outside JSON.
-  // 4. JSON must be valid and parsable.
-  // required format:
-  // {
-  //   "questions": [
-  //     {"text": "<technical question>", "category": "technical"},
-  //     {"text": "<technical question about their stack>", "category": "technical"},
-  //     {"text": "<HR behavioral question>", "category": "hr"},
-  //     {"text": "<coding challenge question>", "category": "coding"},
-  //     {"text": "<scenario based question>", "category": "scenario"}
-  //   ]
-  // }`;
   const randomSeed = Math.floor(Math.random() * 100000);
 
   const randomDifficulty = ["easy", "medium", "hard"][
@@ -266,51 +271,90 @@ const generateQuestionsWithAI = async (
     "practical implementation",
   ][Math.floor(Math.random() * 6)];
 
+  // const prompt = `
+  //     Generate 8-10 UNIQUE interview questions.
+
+  //     Candidate:
+  //     - Role: ${role}
+  //     - Experience: ${experienceLevel}
+  //     - Technologies: ${techStr}
+
+  //     Requirements:
+  //     - Difficulty: ${randomDifficulty}
+  //     - Focus style: ${randomStyle}
+  //     - Questions must differ every request.
+  //     - Avoid generic repeated questions.
+  //     - Include practical industry scenarios.
+  //     - Use random seed ${randomSeed}
+
+  //     Return ONLY valid JSON.
+
+  //     {
+  //       "questions": [
+  //         {
+  //           "text": "<question>",
+  //           "category": "technical"
+  //         },
+  //         {
+  //           "text": "<question>",
+  //           "category": "technical"
+  //         },
+  //         {
+  //           "text": "<question>",
+  //           "category": "hr"
+  //         },
+  //         {
+  //           "text": "<question>",
+  //           "category": "coding"
+  //         },
+  //         {
+  //           "text": "<question>",
+  //           "category": "scenario"
+  //         }
+  //       ]
+  //     }
+  //   `;
   const prompt = `
-      Generate 5 UNIQUE interview questions.
+You are a Principal Engineer and Technical Interviewer with 15+ years of experience hiring for top product companies and startups.
 
-      Candidate:
-      - Role: ${role}
-      - Experience: ${experienceLevel}
-      - Technologies: ${techStr}
+Generate 8-10 high-quality, unique interview questions.
 
-      Requirements:
-      - Difficulty: ${randomDifficulty}
-      - Focus style: ${randomStyle}
-      - Questions must differ every request.
-      - Avoid generic repeated questions.
-      - Include practical industry scenarios.
-      - Use random seed ${randomSeed}
+Candidate Profile:
+- Role: ${role}
+- Experience Level: ${experienceLevel}
+- Tech Stack: ${techStr}
 
-      Return ONLY valid JSON.
+Requirements:
 
-      {
-        "questions": [
-          {
-            "text": "<question>",
-            "category": "technical"
-          },
-          {
-            "text": "<question>",
-            "category": "technical"
-          },
-          {
-            "text": "<question>",
-            "category": "hr"
-          },
-          {
-            "text": "<question>",
-            "category": "coding"
-          },
-          {
-            "text": "<question>",
-            "category": "scenario"
-          }
-        ]
-      }
-    `;
+- Use random seed ${randomSeed}
+- Questions must be fresh and non-generic
+- Include:
+  Technical
+  Coding
+  System Design
+  Debugging
+  Architecture
+  Scenario
+  Behavioral
+  Optimization
 
-  const text = await callFreeAI(prompt, true);
+- Questions must reflect real-world industry problems
+- Avoid repetitive interview questions
+
+Return ONLY valid JSON.
+
+{
+  "questions": [
+    {
+      "id": 1,
+      "text": "Question",
+      "category": "system_design",
+      "focus": "architecture"
+    }
+  ]
+}
+`;
+  const text = await callFreeAI(prompt, true, "Technical Interview Generation");
   const parsed = safeParseJSON(text);
 
   if (
@@ -318,9 +362,16 @@ const generateQuestionsWithAI = async (
     Array.isArray(parsed.questions) &&
     parsed.questions.length > 0
   ) {
-    return parsed.questions.slice(0, 5).map((q) => ({
+    // return parsed.questions.slice(0, 5).map((q) => ({
+    //   text: q.text || "Tell me about your experience.",
+    //   category: q.category || "technical",
+    // }));
+    return parsed.questions.slice(0, 10).map((q) => ({
+      id: q.id || 0,
       text: q.text || "Tell me about your experience.",
       category: q.category || "technical",
+      difficulty: q.difficulty || "Medium",
+      focus: q.focus || "general",
     }));
   }
 
@@ -458,6 +509,9 @@ router.post("/start-session", authMiddleware, async (req, res) => {
         question: q.text,
         answer: "",
         category: q.category,
+        difficulty: q.difficulty || "",
+        focus: q.focus || "",
+        questionId: q.id || 0,
         timestamp: new Date(),
       })),
       role,
@@ -523,10 +577,14 @@ router.post("/complete-session", authMiddleware, async (req, res) => {
 
     session.completed = true;
     session.completedAt = new Date();
-    session.totalScore = session.questions.reduce(
+    const earnedScore = session.questions.reduce(
       (sum, q) => sum + (q.score || 0),
       0,
     );
+
+    const maxScore = session.questions.length * 20;
+
+    session.totalScore = Math.round((earnedScore / maxScore) * 100);
 
     await session.save();
 

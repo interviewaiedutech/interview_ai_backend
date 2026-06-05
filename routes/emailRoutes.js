@@ -3,7 +3,7 @@ const axios = require("axios");
 const authMiddleware = require("../middleware/auth");
 const EmailSession = require("../models/EmailSession");
 const User = require("../models/User");
-
+const AIAnalytics = require("../models/AIAnalytics");
 const router = express.Router();
 
 // ============================================
@@ -37,7 +37,7 @@ if (process.env.GITHUB_TOKEN) {
 }
 
 // Unified Free AI Call
-const callFreeAI = async (prompt, isJson = true) => {
+const callFreeAI = async (prompt, moduleName = "Email", isJson = true) => {
   const providers = [];
 
   if (groqClient) {
@@ -98,10 +98,24 @@ const callFreeAI = async (prompt, isJson = true) => {
   for (const provider of providers) {
     try {
       console.log(`Trying ${provider.name} for Email...`);
+      const start = Date.now();
       const result = await provider.fn();
+      const end = Date.now();
+      await AIAnalytics.create({
+        provider: provider.name,
+        module: moduleName,
+        success: true,
+        responseTime: end - start,
+      });
       console.log(`✅ Success via ${provider.name}`);
       return result;
     } catch (err) {
+      await AIAnalytics.create({
+        provider: provider.name,
+        module: moduleName,
+        success: false,
+        responseTime: 0,
+      });
       console.log(`⚠️ ${provider.name} failed: ${err.message}`);
     }
   }
@@ -183,7 +197,7 @@ Return ONLY valid JSON:
       feedback: parsed?.feedback || "Good attempt. Keep practicing.",
     };
   } catch (error) {
-    console.log("Evaluation failed, using fallback");
+    console.log("Evaluation failed, using fallback", error);
     return evaluateEmailFallback(userEmail);
   }
 };

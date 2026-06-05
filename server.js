@@ -32,6 +32,9 @@ const jdPrepRoutes = require("./routes/jdPrepRoutes");
 
 const passport = require("./config/passport");
 
+//admin routes 01-06-2026
+const adminRoutes = require("./routes/adminRoutes");
+
 // Database connection to MongoDB
 mongoose
   .connect(process.env.MONGODB_URI || "mongodb://localhost:27017/interviewai")
@@ -67,6 +70,10 @@ app.use("/api/communication", communicationRoutes);
 
 //22-05-2026
 app.use("/api/jd", jdPrepRoutes);
+
+//01-06-2025 admin
+app.use("/api/admin", adminRoutes);
+
 // Welcome route for testing API
 app.get("/", (req, res) => {
   res.json({ message: "Welcome to InterviewAI API" });

@@ -9,10 +9,25 @@ const InterviewSessionSchema = new mongoose.Schema({
   },
   questions: [
     {
-      question: String, // The interview question
-      answer: String, // User's answer
-      category: String, // 'technical', 'hr', 'coding', 'scenario'
-      timestamp: Date, // When this question was answered
+      question: String,
+      answer: String,
+      category: String,
+      difficulty: {
+        type: String,
+        default: "",
+      },
+      focus: {
+        type: String,
+        default: "",
+      },
+
+      questionId: {
+        type: Number,
+        default: 0,
+      },
+
+      timestamp: Date,
+
       score: {
         type: Number,
         default: 0,
