@@ -256,104 +256,117 @@ const generateQuestionsWithAI = async (
     ? technologyStack.join(", ")
     : "General";
 
-  const randomSeed = Math.floor(Math.random() * 100000);
+  let experienceInstructions = "";
 
-  const randomDifficulty = ["easy", "medium", "hard"][
-    Math.floor(Math.random() * 3)
-  ];
+  if (experienceLevel === "Beginner") {
+    experienceInstructions = `
+      Generate beginner-friendly questions.
 
-  const randomStyle = [
-    "real world",
-    "debugging",
-    "optimization",
-    "architecture",
-    "behavioral",
-    "practical implementation",
-  ][Math.floor(Math.random() * 6)];
+      Distribution:
+      - 50% fundamentals
+      - 20% practical coding
+      - 15% debugging
+      - 15% behavioral
 
-  // const prompt = `
-  //     Generate 8-10 UNIQUE interview questions.
+      Avoid:
+      - System design
+      - Distributed systems
+      - Microservices
+      - Scalability discussions
+      - Advanced architecture
 
-  //     Candidate:
-  //     - Role: ${role}
-  //     - Experience: ${experienceLevel}
-  //     - Technologies: ${techStr}
+      Focus on:
+      - Core concepts
+      - Definitions
+      - Basic coding
+      - Real-world beginner scenarios
+      `;
+  }
 
-  //     Requirements:
-  //     - Difficulty: ${randomDifficulty}
-  //     - Focus style: ${randomStyle}
-  //     - Questions must differ every request.
-  //     - Avoid generic repeated questions.
-  //     - Include practical industry scenarios.
-  //     - Use random seed ${randomSeed}
+  if (experienceLevel === "Intermediate") {
+    experienceInstructions = `
+      Generate mid-level questions.
 
-  //     Return ONLY valid JSON.
+      Distribution:
+      - 35% fundamentals
+      - 35% practical coding
+      - 15% debugging
+      - 15% system design
 
-  //     {
-  //       "questions": [
-  //         {
-  //           "text": "<question>",
-  //           "category": "technical"
-  //         },
-  //         {
-  //           "text": "<question>",
-  //           "category": "technical"
-  //         },
-  //         {
-  //           "text": "<question>",
-  //           "category": "hr"
-  //         },
-  //         {
-  //           "text": "<question>",
-  //           "category": "coding"
-  //         },
-  //         {
-  //           "text": "<question>",
-  //           "category": "scenario"
-  //         }
-  //       ]
-  //     }
-  //   `;
+      Focus on:
+      - Project experience
+      - API design
+      - Performance
+      - Architecture basics
+      `;
+  }
+
+  if (experienceLevel === "Advanced") {
+    experienceInstructions = `
+      Generate senior-level questions.
+
+      Distribution:
+      - 25% coding
+      - 25% architecture
+      - 20% system design
+      - 15% optimization
+      - 15% leadership
+
+      Focus on:
+      - Scalability
+      - Design decisions
+      - Tradeoffs
+      - Production incidents
+      `;
+  }
+  if (experienceLevel === "Expert") {
+    experienceInstructions = `
+      Generate principal engineer / staff engineer level questions.
+
+      Distribution:
+      - 30% system design
+      - 25% architecture
+      - 20% scalability
+      - 15% leadership
+      - 10% incident management
+
+      Avoid beginner questions.
+
+      Focus on:
+      - Distributed systems
+      - High traffic applications
+      - Design tradeoffs
+      - Team leadership
+      - Production incidents
+      - Cost optimization
+
+      Assume the candidate has 6+ years experience.
+      `;
+  }
   const prompt = `
-You are a Principal Engineer and Technical Interviewer with 15+ years of experience hiring for top product companies and startups.
+      You are a Principal Engineer.
 
-Generate 8-10 high-quality, unique interview questions.
+      Candidate:
+      - Role: ${role}
+      - Experience: ${experienceLevel}
+      - Tech Stack: ${techStr}
 
-Candidate Profile:
-- Role: ${role}
-- Experience Level: ${experienceLevel}
-- Tech Stack: ${techStr}
+      ${experienceInstructions}
 
-Requirements:
+      Return JSON only.
+      {
+        "questions": [
+          {
+            "id": 1,
+            "text": "What is React state?",
+            "category": "technical",
+            "difficulty": "Easy",
+            "focus": "react_fundamentals"
+          }
+        ]
+      }
+    `;
 
-- Use random seed ${randomSeed}
-- Questions must be fresh and non-generic
-- Include:
-  Technical
-  Coding
-  System Design
-  Debugging
-  Architecture
-  Scenario
-  Behavioral
-  Optimization
-
-- Questions must reflect real-world industry problems
-- Avoid repetitive interview questions
-
-Return ONLY valid JSON.
-
-{
-  "questions": [
-    {
-      "id": 1,
-      "text": "Question",
-      "category": "system_design",
-      "focus": "architecture"
-    }
-  ]
-}
-`;
   const text = await callFreeAI(prompt, true, "Technical Interview Generation");
   const parsed = safeParseJSON(text);
 
@@ -370,7 +383,7 @@ Return ONLY valid JSON.
       id: q.id || 0,
       text: q.text || "Tell me about your experience.",
       category: q.category || "technical",
-      difficulty: q.difficulty || "Medium",
+      difficulty: q.difficulty || "Easy",
       focus: q.focus || "general",
     }));
   }
