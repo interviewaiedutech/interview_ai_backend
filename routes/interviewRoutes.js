@@ -358,10 +358,10 @@ const generateQuestionsWithAI = async (
         "questions": [
           {
             "id": 1,
-            "text": "What is React state?",
-            "category": "technical",
+            "text": "Write a function to check whether given string is palindrome or not?",
+            "category": "coding",
             "difficulty": "Easy",
-            "focus": "react_fundamentals"
+            "focus": "java_fundamentals"
           }
         ]
       }

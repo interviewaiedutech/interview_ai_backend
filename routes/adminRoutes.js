@@ -198,13 +198,13 @@ router.get("/dashboard", async (req, res) => {
 
     // Module Usage
 
-    const moduleUsage = {
-      aptitude: aptitudeCount,
-      communication: communicationCount,
-      email: emailCount,
-      interview: interviewCount,
-      jdPrep: jdPrepCount,
-    };
+    // const moduleUsage = {
+    //   aptitude: aptitudeCount,
+    //   communication: communicationCount,
+    //   email: emailCount,
+    //   interview: interviewCount,
+    //   jdPrep: jdPrepCount,
+    // };
 
     // Recent Interview Sessions
 
@@ -354,15 +354,15 @@ router.get("/dashboard", async (req, res) => {
         activeUsers,
         totalSessions,
 
-        averageScores: {
-          aptitude: aptitudeAvg[0]?.avgScore || 0,
-          communication: communicationAvg[0]?.avgScore || 0,
-          email: emailAvg[0]?.avgScore || 0,
-          jdPrep: jdPrepAvg[0]?.avgScore || 0,
-        },
+        // averageScores: {
+        //   aptitude: aptitudeAvg[0]?.avgScore || 0,
+        //   communication: communicationAvg[0]?.avgScore || 0,
+        //   email: emailAvg[0]?.avgScore || 0,
+        //   jdPrep: jdPrepAvg[0]?.avgScore || 0,
+        // },
       },
 
-      moduleUsage,
+      // moduleUsage,
       userGrowth,
       aiUsage,
       recentSessions,
