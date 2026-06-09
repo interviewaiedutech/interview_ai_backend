@@ -563,6 +563,97 @@ function getWeekNumber(date) {
     Math.round(((d - week1) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7)
   );
 }
+router.get("/leaderboard/technical", authMiddleware, async (req, res) => {
+  try {
+    const leaderboard = await InterviewSession.aggregate([
+      {
+        $match: {
+          completed: true,
+        },
+      },
+      {
+        $group: {
+          _id: "$userId",
+          averageScore: {
+            $avg: "$totalScore",
+          },
+          totalSessions: {
+            $sum: 1,
+          },
+        },
+      },
+      {
+        $match: {
+          totalSessions: {
+            $gte: 0,
+          },
+        },
+      },
+      {
+        $sort: {
+          averageScore: -1,
+        },
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      {
+        $unwind: "$user",
+      },
+      {
+        $project: {
+          _id: 1,
+          name: "$user.name",
+          averageScore: {
+            $round: ["$averageScore", 1],
+          },
+          totalSessions: 1,
+        },
+      },
+    ]);
+
+    const userId = req.user.id;
+
+    const rankedLeaderboard = leaderboard.map((user, index) => ({
+      ...user,
+      rank: index + 1,
+    }));
+
+    const currentUserIndex = rankedLeaderboard.findIndex(
+      (user) => user._id.toString() === userId,
+    );
+
+    const currentUserRank =
+      currentUserIndex !== -1 ? rankedLeaderboard[currentUserIndex].rank : null;
+
+    const percentile =
+      currentUserRank && rankedLeaderboard.length
+        ? Math.round(
+            ((rankedLeaderboard.length - currentUserRank) /
+              rankedLeaderboard.length) *
+              100,
+          )
+        : 0;
+
+    res.json({
+      leaderboard: rankedLeaderboard,
+      currentUserRank,
+      percentile,
+      totalUsers: rankedLeaderboard.length,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: "Failed to load leaderboard",
+    });
+  }
+});
 
 // // GET user streak information 13-05-2026
 // router.get("/streak", authMiddleware, async (req, res) => {

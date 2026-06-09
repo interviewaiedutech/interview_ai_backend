@@ -219,7 +219,7 @@ const evaluateAnswer = async (question, answer, category) => {
       Answer: ${answer}
 
       Return exactly this JSON:
-      {"score": <number 10-20>, "feedback": "<one sentence under 20 words>"}`;
+      {"score": <number 10-20>, "feedback": "your feedback about the answer"}`;
 
   try {
     const text = await callFreeAI(
