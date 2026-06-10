@@ -148,42 +148,46 @@ const generateQuestion = async (moduleType, subCategory = "common") => {
   switch (moduleType) {
     case "hr":
       prompt = `Generate 1 professional HR interview question for category: ${subCategory || "common"}.
-Return ONLY valid JSON:
-{
-  "question": "question here",
+         -- Generate Different scenario each time. 
+        Return ONLY valid JSON:
+        {
+          "question": "question here",
 
-}`;
+        }`;
       break;
 
     case "star":
       prompt = `Generate 1 STAR method behavioral question.
-Return ONLY valid JSON:
-{
-  "question": "question here",
- 
-}`;
+      -- Generate Different scenario each time.
+      Return ONLY valid JSON:
+      {
+        "question": "question here",
+      
+      }`;
       break;
 
     case "presentation":
       prompt = `Generate 1 presentation practice topic.
-Return ONLY valid JSON:
-{
-  "question": "presentation topic here",
+      -- Generate Different scenario each time.
+      Return ONLY valid JSON:
+      {
+        "question": "presentation topic here",
 
-}`;
+      }`;
       break;
 
     case "professional":
       prompt = `Generate 1 professional workplace communication scenario.
-Return ONLY valid JSON:
-{
-  "question": "scenario here",
+      -- Generate Different scenario each time.
+      Return ONLY valid JSON:
+      {
+        "question": "scenario here",
 
-}`;
+      }`;
       break;
 
     default:
-      prompt = `Generate 1 good HR interview question. Return ONLY valid JSON.`;
+      prompt = `Generate 1 good HR interview question. Generate Different scenario each time. Return ONLY valid JSON.`;
   }
 
   try {
