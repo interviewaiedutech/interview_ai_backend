@@ -241,99 +241,91 @@ router.post("/process", authMiddleware, async (req, res) => {
     // - Do not use "soft" or "soft-skills" as category.
     // - Generate 8 to 12 high-quality questions differently.
     // - Extract both technical and soft skills in the skills array.`;
-    const randomSeed = Math.floor(Math.random() * 100000);
-
-    const interviewStyles = [
-      "real-world practical",
-      "problem-solving",
-      "system design",
-      "debugging",
-      "behavioral",
-      "scenario-based",
-      "architecture-focused",
-      "performance optimization",
-    ];
-
-    const companies = [
-      "Google",
-      "Amazon",
-      "Microsoft",
-      "Netflix",
-      "Startup",
-      "Product Based Company",
-    ];
-
-    const randomStyle =
-      interviewStyles[Math.floor(Math.random() * interviewStyles.length)];
-
-    const randomCompany =
-      companies[Math.floor(Math.random() * companies.length)];
-
-    const difficultyMix = ["Easy", "Medium", "Hard"]
-      .sort(() => Math.random() - 0.5)
-      .join(", ");
-
     const prompt = `
-      You are an expert technical recruiter.
+    You are a senior technical recruiter, hiring manager, and interview coach with 15+ years of experience.
 
-      Job Description:
-      ${jobDescription}
+    JOB DESCRIPTION:
+    ${jobDescription}
 
-      IMPORTANT REQUIREMENTS:
-      - Generate UNIQUE questions every time.
-      - Avoid repeating common interview questions.
-      - Simulate ${randomCompany} interview style.
-      - Focus on ${randomStyle} questions.
-      - Use varied difficulty levels.
-      - Include practical real-world scenarios.
-      - Use random seed: ${randomSeed}
-      - Question difficulties should include: ${difficultyMix}
+    TASK:
 
-      Return ONLY valid JSON in this exact format.
+    Analyze the Job Description carefully and generate interview questions that are DIRECTLY related to the skills, technologies, responsibilities, tools, frameworks, domain knowledge, and experience requirements mentioned in the JD.
+    DO NOT generate generic interview questions.
+    Every question must be traceable to something explicitly mentioned or strongly implied in the Job Description.
+    Return ONLY valid JSON in the following format:
 
-      {
-        "skills": [
-          "React.js",
-          "Leadership",
-          "Problem Solving",
-          "Communication"
-        ],
+    {
+      "skills": [
+        "React",
+        "Node.js",
+        "MongoDB"
+      ],
 
-        "questions": [
-          {
-            "question": "Question text here",
-            "category": "technical",
-            "difficulty": "Medium",
-            "importance": "Brief reason why this question is asked"
-          }
-        ]
-      }
+      "seniorityLevel": "Mid-Level",
 
-      STRICT RULES:
-      - Use ONLY these categories:
-        technical,
-        behavioral,
-        experience,
-        situational,
-        role-specific,
-        general
+      "highWeightageTopics": [
+        "React Performance",
+        "REST APIs",
+        "System Design"
+      ],
 
-      - Do NOT use:
-        soft,
-        soft-skills,
-        other
+      "questions": [
+        {
+          "question": "Explain how React reconciliation works and how it impacts performance.",
+          "category": "technical",
+          "difficulty": "Medium",
+          "importance": "React is a core requirement in the JD."
+        }
+      ]
+    }
 
-      - Generate 8 to 12 questions.
-      - Questions must differ every request.
-      - Include both technical and behavioral evaluation.
-      - Avoid duplicate concepts.
-      - Include beginner and advanced questions.
-      - Include implementation-focused questions.
-      - Include debugging or optimization questions.
-      - Extract both technical and soft skills in skills array.
+    STRICT RULES:
 
-      Return ONLY JSON.
-      `;
+    1. Extract ALL important technical and soft skills from the JD.
+    2. Determine the seniority level:
+      - Fresher
+      - Junior
+      - Mid-Level
+      - Senior
+      - Lead
+      - Staff
+    3. Generate 8-10 interview questions.
+    4. Use ONLY these categories:
+      - technical
+      - behavioral
+      - experience
+      - situational
+      - role-specific
+      - general
+    5. Difficulty must be ONLY:
+      - Easy
+      - Medium
+      - Hard
+    6. Question distribution:
+      - 60% Technical Questions
+      - 20% Experience-Based Questions
+      - 10% Behavioral Questions
+      - 10% Situational Questions
+    7. If a technology appears in the JD, generate questions specifically about that technology.
+      Examples:
+      - React → React hooks, lifecycle, optimization, state management.
+      - Spring Boot → REST APIs, security, JPA, microservices.
+      - Node.js → Event Loop, streams, async handling.
+      - MongoDB → Indexing, aggregation, schema design.
+      - AWS → EC2, S3, IAM, deployment.
+      - SQL → Joins, indexing, optimization.
+    8. Generate scenario-based questions from the responsibilities section of the JD.
+    9. Generate experience-based questions from the required years of experience.
+    10. Avoid generic questions such as:
+        - Tell me about yourself.
+        - Why should we hire you?
+        - What are your strengths?
+    11. Include real-world problem solving questions whenever possible.
+    12. Include debugging and optimization questions if the JD mentions development work.
+    13. Include architecture and design questions if the JD mentions senior-level responsibilities.
+    14. Populate highWeightageTopics with the most important skills the interviewer is likely to focus on.
+    15. Return ONLY valid JSON.
+  `;
     // const aiResponse = await callFreeAI(prompt, true);
     // const parsed = safeParseJSON(aiResponse);
 
@@ -670,7 +662,30 @@ router.post("/recommendations", authMiddleware, async (req, res) => {
     }
 
     const recommendations = Array.isArray(parsed) ? parsed : [];
+    const validResourceTypes = [
+      "Course",
+      "Video",
+      "Article",
+      "Documentation",
+      "Book",
+      "Tutorial",
+      "Website",
+      "Practice",
+    ];
 
+    recommendations.forEach((recommendation) => {
+      if (!recommendation.suggestedResources) return;
+
+      recommendation.suggestedResources.forEach((resource) => {
+        if (!validResourceTypes.includes(resource.type)) {
+          console.log(
+            `Invalid resource type: ${resource.type}. Converting to Article`,
+          );
+
+          resource.type = "Article";
+        }
+      });
+    });
     session.learningRecommendations = recommendations;
     session.currentStep = "completed";
     session.status = "completed";
