@@ -34,6 +34,9 @@ const passport = require("./config/passport");
 
 //admin routes 01-06-2026
 const adminRoutes = require("./routes/adminRoutes");
+// contact routes
+const contactRoutes = require("./routes/contactRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 
 // Database connection to MongoDB
 mongoose
@@ -46,9 +49,7 @@ mongoose
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
-
     resave: false,
-
     saveUninitialized: false,
   }),
 );
@@ -73,6 +74,12 @@ app.use("/api/jd", jdPrepRoutes);
 
 //01-06-2025 admin
 app.use("/api/admin", adminRoutes);
+
+//contact routes
+app.use("/api/contact", contactRoutes);
+
+//notification routes
+app.use("/api/notifications", notificationRoutes);
 
 // Welcome route for testing API
 app.get("/", (req, res) => {

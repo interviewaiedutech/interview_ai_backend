@@ -7,6 +7,8 @@ const User = require("../models/User");
 const router = express.Router();
 
 const AIAnalytics = require("../models/AIAnalytics");
+const Notification = require("../models/Notification");
+
 // ============================================
 // FREE AI SETUP (Same as Mock Interview)
 // ============================================
@@ -61,29 +63,9 @@ const callFreeAI = async (
     });
   }
 
-  if (geminiApiKey) {
-    providers.push({
-      name: "Gemini",
-      fn: async () => {
-        const response = await axios.post(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
-          {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 600,
-              responseMimeType: "application/json",
-            },
-          },
-        );
-        return response.data.candidates[0].content.parts[0].text;
-      },
-    });
-  }
-
   if (githubToken) {
     providers.push({
-      name: "GitHub",
+      name: "GitHub Models",
       fn: async () => {
         const response = await axios.post(
           "https://models.inference.ai.azure.com/chat/completions",
@@ -100,11 +82,31 @@ const callFreeAI = async (
     });
   }
 
+  if (geminiApiKey) {
+    providers.push({
+      name: "Gemini",
+      fn: async () => {
+        const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+          {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 600,
+            },
+          },
+        );
+        return response.data.candidates[0].content.parts[0].text;
+      },
+    });
+  }
+
   for (const provider of providers) {
     try {
       console.log(`Trying ${provider.name} for Communication...`);
       const start = Date.now();
       const result = await provider.fn();
+      // console.log("ai comm", result);
       const end = Date.now();
       await AIAnalytics.create({
         provider: provider.name,
@@ -122,6 +124,10 @@ const callFreeAI = async (
         responseTime: 0,
       });
       console.log(`⚠️ ${provider.name} failed: ${err.message}`);
+      console.log(err.response?.data);
+      console.log(JSON.stringify(err.response?.data, null, 2));
+
+      console.log(err.message);
     }
   }
 
@@ -130,11 +136,25 @@ const callFreeAI = async (
 
 const safeParseJSON = (text) => {
   try {
+    text = text
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim();
+
     const match = text.match(/\{[\s\S]*\}/);
-    const jsonStr = match ? match[0] : text;
-    return JSON.parse(jsonStr);
-  } catch (e) {
-    console.error("JSON Parse Error:", e.message);
+
+    // console.log("JSON TO PARSE");
+
+    // console.log(text, match);
+    if (!match) {
+      return null;
+    }
+
+    return JSON.parse(match[0]);
+  } catch (err) {
+    console.log("parse json error", err.message);
+    // console.log(text);
+
     return null;
   }
 };
@@ -142,65 +162,110 @@ const safeParseJSON = (text) => {
 // ============================================
 // QUESTION GENERATION
 // ============================================
-const generateQuestion = async (moduleType, subCategory = "common") => {
+const generateQuestion = async (
+  moduleType,
+  subCategory = "common",
+  profile = {},
+) => {
+  const {
+    role = "Software Developer",
+    experienceLevel = "Beginner",
+    technologyStack = [],
+  } = profile;
+  // Format tech stack nicely for the prompt
+  const techString =
+    technologyStack.length > 0
+      ? technologyStack.join(", ")
+      : "relevant technologies in your field";
+
   let prompt = "";
 
   switch (moduleType) {
     case "hr":
-      prompt = `Generate 1 professional HR interview question for category: ${subCategory || "common"}.
-         -- Generate Different scenario each time. 
-        Return ONLY valid JSON:
-        {
-          "question": "question here",
+      prompt = `You are an experienced HR interviewer conducting a real technical + behavioral interview for a ${experienceLevel} ${role} position.
 
-        }`;
+Generate **1 realistic, professional HR interview question** suitable for the candidate's profile.
+- Role: ${role}
+- Experience Level: ${experienceLevel}
+- Technology Stack: ${techString}
+- Category: ${subCategory || "common"}
+
+Make the question feel like a real interview question (not generic). Focus on experience, challenges, projects, teamwork, or role-specific situations.
+Generate a **different scenario** every time.
+
+Return ONLY valid JSON in this exact format:
+{
+  "question": "Your full question here"
+}`;
       break;
 
     case "star":
-      prompt = `Generate 1 STAR method behavioral question.
-      -- Generate Different scenario each time.
-      Return ONLY valid JSON:
-      {
-        "question": "question here",
-      
-      }`;
+      prompt = `You are an experienced HR/behavioral interviewer for a ${experienceLevel} ${role} role.
+
+          Generate **1 strong STAR method behavioral question** (Situation, Task, Action, Result) tailored to the candidate.
+
+          Profile:
+          - Role: ${role}
+          - Level: ${experienceLevel}
+          - Tech: ${techString}
+
+          Make it realistic and relevant to software development / workplace challenges. Vary the scenario each time (leadership, conflict, failure, success, collaboration, tight deadlines, etc.).
+
+          Return ONLY valid JSON:
+          {
+            "question": "Your full STAR question here"
+          }`;
       break;
 
     case "presentation":
-      prompt = `Generate 1 presentation practice topic.
-      -- Generate Different scenario each time.
-      Return ONLY valid JSON:
-      {
-        "question": "presentation topic here",
+      prompt = `Generate **1 realistic presentation practice topic** for a ${experienceLevel} ${role} with experience in ${techString}.
 
-      }`;
+          The topic should be something a candidate might actually present in a real interview or team setting (architecture, project deep-dive, technology evaluation, process improvement, etc.).
+          Make it specific and different every time.
+
+          Return ONLY valid JSON:
+          {
+            "question": "Presentation topic here"
+          }`;
       break;
 
     case "professional":
-      prompt = `Generate 1 professional workplace communication scenario.
-      -- Generate Different scenario each time.
-      Return ONLY valid JSON:
-      {
-        "question": "scenario here",
+      prompt = `Generate **1 realistic workplace communication scenario** for a ${experienceLevel} ${role} working with ${techString}.
 
-      }`;
+          The scenario should involve emails, meetings, stakeholder communication, giving/receiving feedback, handling disagreements, or cross-team collaboration.
+          Make it feel like a real professional situation. Generate a different scenario each time.
+
+          Return ONLY valid JSON:
+          {
+            "question": "Full scenario description here"
+          }`;
       break;
 
     default:
-      prompt = `Generate 1 good HR interview question. Generate Different scenario each time. Return ONLY valid JSON.`;
+      prompt = `Generate 1 realistic HR interview question for a ${experienceLevel} ${role} role with tech stack: ${techString}.
+          Generate a different scenario each time.
+          Return ONLY valid JSON:
+          {
+            "question": "question here"
+          }`;
   }
 
   try {
-    const text = await callFreeAI(prompt, true);
-    console.log("comm question ai: ", text);
+    const text = await callFreeAI(prompt, "Communication", true);
+    console.log("comm question ai Raw Response: ", text);
     const parsed = safeParseJSON(text);
+    // console.log("comm PARSED");
+
+    // console.log(parsed);
 
     if (parsed && parsed.question) {
+      // console.log("QUESTION OK");
       return parsed;
     }
+    console.log("QUESTION FAILED");
     throw new Error("Invalid response");
   } catch (error) {
-    console.log("AI failed, using fallback");
+    console.log("AI failed, using fallback", error);
     return getFallbackQuestion(moduleType, subCategory);
   }
 };
@@ -213,83 +278,116 @@ const getFallbackQuestion = (moduleType, subCategory) => {
   const fallbacks = {
     hr: {
       common: {
-        question: "Tell me about yourself.",
+        question:
+          "Walk me through your professional journey and what motivated you to apply for this role.",
         tips: [
-          "Focus on professional background",
-          "Keep it 60-90 seconds",
-          "End with career goals",
+          "Focus on relevant experience and achievements",
+          "Keep your response to 60-90 seconds",
+          "Connect your background to the role you're applying for",
         ],
-        expectedKeywords: ["experience", "skills", "career"],
+        expectedKeywords: ["experience", "achievements", "motivation", "role"],
       },
       behavioral: {
         question:
-          "Tell me about a time you faced a challenge at work and how you overcame it.",
+          "Tell me about a time when you had to work on a complex project with tight deadlines. How did you manage it?",
         tips: [
-          "Use STAR method",
-          "Be specific about your role",
-          "Share measurable results",
+          "Use the STAR method (Situation, Task, Action, Result)",
+          "Highlight prioritization and time management",
+          "Mention any tools or techniques you used",
         ],
-        expectedKeywords: ["situation", "task", "action", "result"],
+        expectedKeywords: ["deadline", "prioritization", "delivery", "result"],
       },
       situational: {
         question:
-          "How would you handle a disagreement with your manager about a technical approach?",
+          "You are working on a critical feature and discover a major technical debt issue that could delay the release. How would you handle this situation?",
         tips: [
-          "Stay professional",
-          "Focus on data/facts",
-          "Show collaboration",
+          "Show clear communication with stakeholders",
+          "Balance quality vs. deadlines",
+          "Demonstrate problem-solving and ownership",
         ],
-        expectedKeywords: ["professional", "discuss", "compromise", "data"],
+        expectedKeywords: [
+          "prioritize",
+          "communicate",
+          "trade-off",
+          "stakeholder",
+        ],
       },
       career: {
-        question: "Where do you see yourself in 5 years?",
-        tips: ["Align with company goals", "Show ambition", "Be realistic"],
-        expectedKeywords: ["growth", "learn", "contribute", "career"],
+        question:
+          "Where do you see your career in the next 3-5 years, and how does this role align with your long-term goals?",
+        tips: [
+          "Show ambition and growth mindset",
+          "Align your goals with the company’s direction",
+          "Be realistic and specific",
+        ],
+        expectedKeywords: ["growth", "learning", "contribution", "long-term"],
       },
     },
     star: {
       question:
-        "Describe a situation where you had to solve a difficult problem at work. What was your approach and what was the outcome?",
+        "Describe a challenging situation where you had to collaborate with a difficult team member to deliver a project successfully. What was the outcome?",
       tips: [
-        "S - Describe the Situation",
-        "T - Explain your Task",
-        "A - Detail your Actions",
-        "R - Share the Results",
+        "S - Clearly describe the Situation",
+        "T - Explain your specific Task/Responsibility",
+        "A - Detail the Actions you took",
+        "R - Share measurable Results and learnings",
       ],
-      expectedKeywords: ["situation", "task", "action", "result"],
+      expectedKeywords: [
+        "situation",
+        "task",
+        "action",
+        "result",
+        "collaboration",
+      ],
     },
     presentation: {
       question:
-        "Prepare a 3-minute presentation about a project you worked on. Explain the challenge, your solution, and the results.",
+        "Prepare a 5-minute presentation on a technical project you are most proud of. Explain the problem, your approach, technical decisions, and the final impact.",
       tips: [
-        "Start with a hook",
-        "Structure your content",
-        "Use examples",
-        "End with a strong conclusion",
+        "Structure your presentation clearly (Problem → Solution → Results)",
+        "Highlight technical decisions and trade-offs",
+        "Practice good pacing and engagement",
       ],
-      expectedKeywords: ["hook", "structure", "examples", "conclusion"],
+      expectedKeywords: [
+        "problem",
+        "solution",
+        "decision",
+        "impact",
+        "results",
+      ],
     },
     professional: {
       question:
-        "A client is unhappy with a delayed delivery. How would you communicate with them to resolve the situation?",
+        "A senior stakeholder requests a last-minute major change in scope just before the release deadline. How would you handle this communication and situation?",
       tips: [
-        "Acknowledge the issue",
-        "Apologize sincerely",
-        "Offer solution",
-        "Follow up",
+        "Acknowledge their request professionally",
+        "Clearly explain impact on timeline and resources",
+        "Propose alternatives or phased delivery",
+        "Maintain positive stakeholder relationship",
       ],
-      expectedKeywords: ["acknowledge", "apologize", "solution", "follow-up"],
+      expectedKeywords: [
+        "stakeholder",
+        "scope",
+        "impact",
+        "negotiation",
+        "alternative",
+      ],
     },
   };
 
-  return (
-    fallbacks[moduleType] ||
-    fallbacks.hr?.common || {
-      question: "Tell me about yourself.",
-      tips: ["Keep it professional", "Highlight relevant experience"],
-      expectedKeywords: ["experience", "skills"],
-    }
-  );
+  if (moduleType === "hr") {
+    return fallbacks.hr[subCategory] || fallbacks.hr.common;
+  }
+
+  return fallbacks[moduleType] || fallbacks.hr.common;
+  // return (
+  //   fallbacks[moduleType] ||
+  //   fallbacks.hr?.common || {
+  //     question: "Tell me about yourself.",
+  //     tips: ["Keep it professional", "Highlight relevant experience"],
+  //     expectedKeywords: ["experience", "skills"],
+  //   }
+  // );
 };
 
 // ============================================
@@ -310,7 +408,7 @@ Return ONLY valid JSON:
 }`;
 
   try {
-    const text = await callFreeAI(prompt, true);
+    const text = await callFreeAI(prompt, "Communication", true);
     console.log("ai comm result: ", text);
     const parsed = safeParseJSON(text);
 
@@ -355,10 +453,20 @@ const getFallbackEvaluation = (answer) => {
 router.post("/generate-question", authMiddleware, async (req, res) => {
   const { moduleType, category = "common" } = req.body;
 
+  const user = await User.findById(req.userId).select(
+    "role experienceLevel technologyStack",
+  );
   try {
-    const question = await generateQuestion(moduleType, category);
+    const question = await generateQuestion(moduleType, category, {
+      role: user?.role || "Software Developer",
+
+      experienceLevel: user?.experienceLevel || "Beginner",
+
+      technologyStack: user?.technologyStack || [],
+    });
     res.json({ success: true, source: "ai", question });
   } catch (error) {
+    console.log("comm ai generated error", error);
     const fallback = getFallbackQuestion(moduleType, category);
     res.json({ success: true, source: "fallback", question: fallback });
   }
@@ -412,6 +520,18 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
       await session.save();
     }
   }
+
+  // notification
+  const user = await User.findById(req.userId);
+
+  await Notification.create({
+    title: "Communication Practice Completed",
+    message: `${user?.name || "User"} completed ${moduleType}`,
+    type: "communication",
+    userId: req.userId,
+    entityId: sessionId,
+    entityType: "communication",
+  });
 
   // Update user stats
   try {

@@ -139,9 +139,17 @@ router.get("/", authMiddleware, async (req, res) => {
     // === 5. JD Prep Sessions ===
     const jdSessions = await JDPrepSession.find({
       userId: req.userId,
-      status: "completed",
     });
     const totalJDSessions = jdSessions.length;
+    // console.log("jd session count", totalJDSessions);
+    // console.log(
+    //   jdSessions.map((s) => ({
+    //     id: s._id,
+    //     status: s.status,
+    //     completedAt: s.completedAt,
+    //     score: s.overallEvaluation?.overallScore,
+    //   })),
+    // );
 
     const jdAvgScore = totalJDSessions
       ? Math.round(

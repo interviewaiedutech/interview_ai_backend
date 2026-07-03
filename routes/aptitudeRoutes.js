@@ -4,6 +4,7 @@ const authMiddleware = require("../middleware/auth");
 const AptitudeSession = require("../models/AptitudeSession");
 const User = require("../models/User");
 const router = express.Router();
+const Notification = require("../models/Notification");
 
 const APTITUDE_API = "https://aptitude-gold.vercel.app";
 
@@ -197,6 +198,14 @@ router.post("/session/complete", authMiddleware, async (req, res) => {
 
     // Update user's overall progress (optional)
     const user = await User.findById(req.userId);
+    await Notification.create({
+      title: "Aptitude Session Completed",
+      message: `${user?.name || "User"} completed ${session.topic}`,
+      type: "aptitude",
+      userId: req.userId,
+      entityId: sessionId,
+      entityType: "aptitude",
+    });
     if (user) {
       // You can add aptitude stats to user model if needed
       if (!user.aptitudeStats) {

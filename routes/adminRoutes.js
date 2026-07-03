@@ -10,6 +10,8 @@ const JDPrepSession = require("../models/JDPrepSession");
 const AIAnalytics = require("../models/AIAnalytics");
 const auth = require("../middleware/auth");
 const SystemSettings = require("../models/SystemSettings");
+const Contact = require("../models/Contact");
+const sendContactReply = require("../utils/sendContactReply");
 
 const bcrypt = require("bcryptjs");
 const { Parser } = require("json2csv");
@@ -19,13 +21,49 @@ const AuditLog = require("../models/AuditLog");
 
 router.use(auth);
 
+/* sidebar stats counts*/
+router.get("/stats/users-count", auth, async (req, res) => {
+  try {
+    const count = await User.countDocuments({
+      accountType: { $ne: "admin" },
+    });
+
+    res.json({
+      success: true,
+      count,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch users count",
+    });
+  }
+});
+
+router.get("/stats/unread-messages", auth, async (req, res) => {
+  try {
+    const count = await Contact.countDocuments({
+      isRead: false,
+    });
+
+    res.json({
+      success: true,
+      count,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch unread count",
+    });
+  }
+});
+
 /*
 =========================================
 Dashboard API
 GET /api/admin/dashboard
 =========================================
 */
-
 router.get("/dashboard", async (req, res) => {
   try {
     // Users
@@ -196,16 +234,6 @@ router.get("/dashboard", async (req, res) => {
       },
     ]);
 
-    // Module Usage
-
-    // const moduleUsage = {
-    //   aptitude: aptitudeCount,
-    //   communication: communicationCount,
-    //   email: emailCount,
-    //   interview: interviewCount,
-    //   jdPrep: jdPrepCount,
-    // };
-
     // Recent Interview Sessions
 
     const interviewSessions = await InterviewSession.find()
@@ -347,6 +375,142 @@ router.get("/dashboard", async (req, res) => {
       .sort((a, b) => b.averageScore - a.averageScore)
       .slice(0, 5);
 
+    const now = new Date();
+
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const previousMonthStart = new Date(
+      now.getFullYear(),
+      now.getMonth() - 1,
+      1,
+    );
+
+    const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    //users trends
+    const currentMonthUsers = await User.countDocuments({
+      accountType: "user",
+      createdAt: { $gte: currentMonthStart },
+    });
+
+    const previousMonthUsers = await User.countDocuments({
+      accountType: "user",
+      createdAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+    });
+
+    //admin trends
+    const currentMonthAdmins = await User.countDocuments({
+      accountType: "admin",
+      createdAt: { $gte: currentMonthStart },
+    });
+
+    const previousMonthAdmins = await User.countDocuments({
+      accountType: "admin",
+      createdAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+    });
+
+    //sessions trend
+    const currentMonthSessions =
+      (await AptitudeSession.countDocuments({
+        createdAt: { $gte: currentMonthStart },
+      })) +
+      (await CommunicationSession.countDocuments({
+        createdAt: { $gte: currentMonthStart },
+      })) +
+      (await EmailSession.countDocuments({
+        createdAt: { $gte: currentMonthStart },
+      })) +
+      (await InterviewSession.countDocuments({
+        startedAt: { $gte: currentMonthStart },
+      })) +
+      (await JDPrepSession.countDocuments({
+        createdAt: { $gte: currentMonthStart },
+      }));
+
+    const previousMonthSessions =
+      (await AptitudeSession.countDocuments({
+        createdAt: {
+          $gte: previousMonthStart,
+          $lt: previousMonthEnd,
+        },
+      })) +
+      (await CommunicationSession.countDocuments({
+        createdAt: {
+          $gte: previousMonthStart,
+          $lt: previousMonthEnd,
+        },
+      })) +
+      (await EmailSession.countDocuments({
+        createdAt: {
+          $gte: previousMonthStart,
+          $lt: previousMonthEnd,
+        },
+      })) +
+      (await InterviewSession.countDocuments({
+        startedAt: {
+          $gte: previousMonthStart,
+          $lt: previousMonthEnd,
+        },
+      })) +
+      (await JDPrepSession.countDocuments({
+        createdAt: {
+          $gte: previousMonthStart,
+          $lt: previousMonthEnd,
+        },
+      }));
+
+    //active users trend
+    const currentActiveUsers = await User.countDocuments({
+      accountType: "user",
+      "streak.lastActiveDate": {
+        $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    const previousActiveUsers = await User.countDocuments({
+      accountType: "user",
+      "streak.lastActiveDate": {
+        $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+        $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    //growth trend
+    const calculateGrowth = (current, previous) => {
+      if (previous === 0) {
+        return current > 0 ? 100 : 0;
+      }
+
+      return Number((((current - previous) / previous) * 100).toFixed(1));
+    };
+
+    //create trends
+    const totalUsersTrend = calculateGrowth(
+      currentMonthUsers,
+      previousMonthUsers,
+    );
+
+    const totalAdminsTrend = calculateGrowth(
+      currentMonthAdmins,
+      previousMonthAdmins,
+    );
+
+    const totalSessionsTrend = calculateGrowth(
+      currentMonthSessions,
+      previousMonthSessions,
+    );
+
+    const activeUsersTrend = calculateGrowth(
+      currentActiveUsers,
+      previousActiveUsers,
+    );
+
     res.status(200).json({
       stats: {
         totalUsers,
@@ -354,15 +518,11 @@ router.get("/dashboard", async (req, res) => {
         activeUsers,
         totalSessions,
 
-        // averageScores: {
-        //   aptitude: aptitudeAvg[0]?.avgScore || 0,
-        //   communication: communicationAvg[0]?.avgScore || 0,
-        //   email: emailAvg[0]?.avgScore || 0,
-        //   jdPrep: jdPrepAvg[0]?.avgScore || 0,
-        // },
+        totalUsersTrend,
+        totalAdminsTrend,
+        totalSessionsTrend,
+        activeUsersTrend,
       },
-
-      // moduleUsage,
       userGrowth,
       aiUsage,
       recentSessions,
@@ -758,7 +918,94 @@ router.get("/sessions", async (req, res) => {
 
     sessions.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    res.json(sessions);
+    const now = new Date();
+
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const previousMonthStart = new Date(
+      now.getFullYear(),
+      now.getMonth() - 1,
+      1,
+    );
+
+    const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const currentSessions = sessions.filter(
+      (s) => new Date(s.date) >= currentMonthStart,
+    );
+
+    const previousSessions = sessions.filter((s) => {
+      const d = new Date(s.date);
+
+      return d >= previousMonthStart && d < previousMonthEnd;
+    });
+
+    const calculateGrowth = (current, previous) => {
+      if (previous === 0) {
+        return current > 0 ? 100 : 0;
+      }
+
+      return Number((((current - previous) / previous) * 100).toFixed(1));
+    };
+
+    const totalSessionsTrend = calculateGrowth(
+      currentSessions.length,
+      previousSessions.length,
+    );
+
+    const currentCompleted = currentSessions.filter(
+      (s) => s.status?.toLowerCase() === "completed",
+    ).length;
+
+    const previousCompleted = previousSessions.filter(
+      (s) => s.status?.toLowerCase() === "completed",
+    ).length;
+
+    const completedTrend = calculateGrowth(currentCompleted, previousCompleted);
+
+    const currentInProgress = currentSessions.filter((s) =>
+      s.status?.toLowerCase().includes("progress"),
+    ).length;
+
+    const previousInProgress = previousSessions.filter((s) =>
+      s.status?.toLowerCase().includes("progress"),
+    ).length;
+
+    const inProgressTrend = calculateGrowth(
+      currentInProgress,
+      previousInProgress,
+    );
+
+    const currentScores = currentSessions
+      .map((s) => Number(s.score))
+      .filter((s) => !isNaN(s));
+
+    const previousScores = previousSessions
+      .map((s) => Number(s.score))
+      .filter((s) => !isNaN(s));
+
+    const currentAvg =
+      currentScores.length > 0
+        ? currentScores.reduce((a, b) => a + b, 0) / currentScores.length
+        : 0;
+
+    const previousAvg =
+      previousScores.length > 0
+        ? previousScores.reduce((a, b) => a + b, 0) / previousScores.length
+        : 0;
+
+    const avgScoreTrend = Number((currentAvg - previousAvg).toFixed(1));
+
+    res.json({
+      sessions,
+
+      stats: {
+        totalSessionsTrend,
+        completedTrend,
+        inProgressTrend,
+        avgScoreTrend,
+      },
+    });
   } catch (error) {
     console.error(error);
 
@@ -928,29 +1175,119 @@ router.get("/sessions/:id", async (req, res) => {
 
 router.get("/ai-analytics", async (req, res) => {
   try {
-    const totalRequests = await AIAnalytics.countDocuments();
+    const { range = "7d" } = req.query;
+
+    const now = new Date();
+
+    let currentStart = new Date();
+    let previousStart = new Date();
+    let previousEnd = new Date();
+
+    switch (range) {
+      case "24h":
+        currentStart.setHours(now.getHours() - 24);
+
+        previousEnd = new Date(currentStart);
+        previousStart = new Date(previousEnd);
+        previousStart.setHours(previousStart.getHours() - 24);
+        break;
+
+      case "7d":
+        currentStart.setDate(now.getDate() - 7);
+
+        previousEnd = new Date(currentStart);
+        previousStart = new Date(previousEnd);
+        previousStart.setDate(previousStart.getDate() - 7);
+        break;
+
+      case "30d":
+        currentStart.setDate(now.getDate() - 30);
+
+        previousEnd = new Date(currentStart);
+        previousStart = new Date(previousEnd);
+        previousStart.setDate(previousStart.getDate() - 30);
+        break;
+
+      case "90d":
+        currentStart.setDate(now.getDate() - 90);
+
+        previousEnd = new Date(currentStart);
+        previousStart = new Date(previousEnd);
+        previousStart.setDate(previousStart.getDate() - 90);
+        break;
+
+      default:
+        currentStart.setDate(now.getDate() - 7);
+    }
+
+    const filter = {
+      createdAt: { $gte: currentStart },
+    };
+
+    const totalRequests = await AIAnalytics.countDocuments(filter);
+
+    const previousTotalRequests = await AIAnalytics.countDocuments({
+      createdAt: {
+        $gte: previousStart,
+        $lt: previousEnd,
+      },
+    });
+
+    const previousGroqRequests = await AIAnalytics.countDocuments({
+      provider: "Groq",
+      createdAt: {
+        $gte: previousStart,
+        $lt: previousEnd,
+      },
+    });
+
+    const previousGeminiRequests = await AIAnalytics.countDocuments({
+      provider: "Gemini",
+      createdAt: {
+        $gte: previousStart,
+        $lt: previousEnd,
+      },
+    });
+
+    const previousGithubRequests = await AIAnalytics.countDocuments({
+      provider: "GitHub Models",
+      createdAt: {
+        $gte: previousStart,
+        $lt: previousEnd,
+      },
+    });
 
     const groqRequests = await AIAnalytics.countDocuments({
+      ...filter,
       provider: "Groq",
     });
 
     const geminiRequests = await AIAnalytics.countDocuments({
+      ...filter,
       provider: "Gemini",
     });
 
     const githubRequests = await AIAnalytics.countDocuments({
+      ...filter,
       provider: "GitHub Models",
     });
 
     const successRequests = await AIAnalytics.countDocuments({
+      ...filter,
       success: true,
     });
 
     const failedRequests = await AIAnalytics.countDocuments({
+      ...filter,
       success: false,
     });
 
     const avgResponse = await AIAnalytics.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: currentStart },
+        },
+      },
       {
         $group: {
           _id: null,
@@ -971,19 +1308,32 @@ router.get("/ai-analytics", async (req, res) => {
         ? ((failedRequests / totalRequests) * 100).toFixed(1)
         : 0;
 
+    const calculateGrowth = (current, previous) => {
+      if (previous === 0) {
+        return current > 0 ? 100 : 0;
+      }
+
+      return Number((((current - previous) / previous) * 100).toFixed(1));
+    };
+
+    const totalTrend = calculateGrowth(totalRequests, previousTotalRequests);
+    const groqTrend = calculateGrowth(groqRequests, previousGroqRequests);
+    const geminiTrend = calculateGrowth(geminiRequests, previousGeminiRequests);
+    const githubTrend = calculateGrowth(githubRequests, previousGithubRequests);
+
     res.json({
       totalRequests,
-
       groqRequests,
-
       geminiRequests,
-
       githubRequests,
 
+      totalTrend,
+      groqTrend,
+      geminiTrend,
+      githubTrend,
+
       successRate,
-
       failureRate,
-
       avgResponseTime: avgResponse[0]?.avgTime || 0,
     });
   } catch (error) {
@@ -996,7 +1346,6 @@ router.get("/ai-analytics", async (req, res) => {
 });
 
 // reports
-
 const getReportSummaryData = async (startDate, endDate) => {
   let dateFilter = {};
 
@@ -1082,71 +1431,6 @@ const getReportSummaryData = async (startDate, endDate) => {
     moduleUsage[a] > moduleUsage[b] ? a : b,
   );
 
-  const interviewScores = await InterviewSession.aggregate([
-    {
-      $group: {
-        _id: null,
-        avgScore: {
-          $avg: "$totalScore",
-        },
-      },
-    },
-  ]);
-
-  const communicationAvg = await CommunicationSession.aggregate([
-    {
-      $group: {
-        _id: null,
-        avgScore: {
-          $avg: "$evaluation.overall.score",
-        },
-      },
-    },
-  ]);
-
-  const emailAvg = await EmailSession.aggregate([
-    {
-      $group: {
-        _id: null,
-        avgScore: {
-          $avg: "$evaluation.score",
-        },
-      },
-    },
-  ]);
-
-  const aptitudeAvg = await AptitudeSession.aggregate([
-    {
-      $group: {
-        _id: null,
-        avgScore: {
-          $avg: "$percentage",
-        },
-      },
-    },
-  ]);
-
-  const jdPrepAvg = await JDPrepSession.aggregate([
-    {
-      $group: {
-        _id: null,
-        avgScore: {
-          $avg: "$overallEvaluation.overallScore",
-        },
-      },
-    },
-  ]);
-
-  const scores = [
-    interviewScores[0]?.avgScore || 0,
-    communicationAvg[0]?.avgScore || 0,
-    emailAvg[0]?.avgScore || 0,
-    aptitudeAvg[0]?.avgScore || 0,
-    jdPrepAvg[0]?.avgScore || 0,
-  ];
-
-  const overallAverageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-
   const monthlyUsers = await User.aggregate([
     {
       $match: {
@@ -1189,11 +1473,202 @@ const getReportSummaryData = async (startDate, endDate) => {
     };
   });
 
+  const now = new Date();
+
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  const previousMonthEnd = currentMonthStart;
+
+  const previousMonthUsers = await User.countDocuments({
+    accountType: { $ne: "admin" },
+    createdAt: {
+      $gte: previousMonthStart,
+      $lt: previousMonthEnd,
+    },
+  });
+
+  const currentMonthSessionFilter = {
+    createdAt: {
+      $gte: currentMonthStart,
+    },
+  };
+
+  const previousMonthSessionFilter = {
+    createdAt: {
+      $gte: previousMonthStart,
+      $lt: previousMonthEnd,
+    },
+  };
+
+  const currentTotalSessions =
+    (await InterviewSession.countDocuments({
+      startedAt: { $gte: currentMonthStart },
+    })) +
+    (await JDPrepSession.countDocuments({
+      createdAt: { $gte: currentMonthStart },
+    })) +
+    (await CommunicationSession.countDocuments({
+      completedAt: { $gte: currentMonthStart },
+    })) +
+    (await EmailSession.countDocuments({
+      completedAt: { $gte: currentMonthStart },
+    })) +
+    (await AptitudeSession.countDocuments({
+      completedAt: { $gte: currentMonthStart },
+    }));
+
+  const previousTotalSessions =
+    (await InterviewSession.countDocuments({
+      startedAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+    })) +
+    (await JDPrepSession.countDocuments({
+      createdAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+    })) +
+    (await CommunicationSession.countDocuments({
+      completedAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+    })) +
+    (await EmailSession.countDocuments({
+      completedAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+    })) +
+    (await AptitudeSession.countDocuments({
+      completedAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+    }));
+
+  const calculateGrowth = (current, previous) => {
+    if (previous === 0) {
+      return current > 0 ? 100 : 0;
+    }
+
+    return Number((((current - previous) / previous) * 100).toFixed(1));
+  };
+
+  const newUsersTrend = calculateGrowth(monthlyNewUsers, previousMonthUsers);
+
+  const currentUsersCount = await User.countDocuments({
+    accountType: { $ne: "admin" },
+  });
+
+  const previousUsersCount = previousMonthUsers;
+
+  const currentAvgSessionsPerUser =
+    currentUsersCount > 0 ? currentTotalSessions / currentUsersCount : 0;
+
+  const previousAvgSessionsPerUser =
+    previousUsersCount > 0 ? previousTotalSessions / previousUsersCount : 0;
+
+  const sessionsTrend = calculateGrowth(
+    currentAvgSessionsPerUser,
+    previousAvgSessionsPerUser,
+  );
+  const currentCompletedSessions =
+    (await InterviewSession.countDocuments({
+      startedAt: { $gte: currentMonthStart },
+      completed: true,
+    })) +
+    (await JDPrepSession.countDocuments({
+      createdAt: { $gte: currentMonthStart },
+      status: "completed",
+    })) +
+    (await CommunicationSession.countDocuments({
+      completedAt: { $gte: currentMonthStart },
+    })) +
+    (await EmailSession.countDocuments({
+      completedAt: { $gte: currentMonthStart },
+    })) +
+    (await AptitudeSession.countDocuments({
+      completedAt: { $gte: currentMonthStart },
+    }));
+
+  const previousCompletedSessions =
+    (await InterviewSession.countDocuments({
+      startedAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+      completed: true,
+    })) +
+    (await JDPrepSession.countDocuments({
+      createdAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+      status: "completed",
+    })) +
+    (await CommunicationSession.countDocuments({
+      completedAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+    })) +
+    (await EmailSession.countDocuments({
+      completedAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+    })) +
+    (await AptitudeSession.countDocuments({
+      completedAt: {
+        $gte: previousMonthStart,
+        $lt: previousMonthEnd,
+      },
+    }));
+
+  const currentCompletionRate =
+    currentTotalSessions > 0
+      ? Number(
+          ((currentCompletedSessions / currentTotalSessions) * 100).toFixed(1),
+        )
+      : 0;
+
+  const previousCompletionRate =
+    previousTotalSessions > 0
+      ? Number(
+          ((previousCompletedSessions / previousTotalSessions) * 100).toFixed(
+            1,
+          ),
+        )
+      : 0;
+
+  const completionRateTrend = Number(
+    (currentCompletionRate - previousCompletionRate).toFixed(1),
+  );
+
+  console.log("Current Users:", monthlyNewUsers);
+  console.log("Previous Users:", previousMonthUsers);
+
+  console.log("Current Sessions:", currentTotalSessions);
+  console.log("Previous Sessions:", previousTotalSessions);
+
+  console.log("current average score per user:", currentAvgSessionsPerUser);
+  console.log("previous average score per user:", previousAvgSessionsPerUser);
+
   return {
     monthlyNewUsers,
     avgSessionsPerUser,
     mostUsedModule,
-    overallAverageScore,
+    completionRate: currentCompletionRate,
+
+    newUsersTrend,
+    sessionsTrend,
+    completionRateTrend,
+
     userGrowth,
     moduleUsage,
     interviewCount,
@@ -1216,6 +1691,13 @@ router.get("/reports", async (req, res) => {
       avgSessionsPerUser: data.avgSessionsPerUser,
       mostUsedModule: data.mostUsedModule,
       overallAverageScore: Math.round(data.overallAverageScore),
+      completionRate: data.completionRate,
+
+      newUsersTrend: data.newUsersTrend,
+      sessionsTrend: data.sessionsTrend,
+      avgScoreTrend: data.avgScoreTrend,
+      completionRateTrend: data.completionRateTrend,
+
       moduleUsage: data.moduleUsage,
       userGrowth: data.userGrowth,
     });
@@ -1563,151 +2045,126 @@ router.get("/reports/export", async (req, res) => {
   }
 });
 
-// router.get("/reports/export", async (req, res) => {
-//   const { startDate, endDate } = req.query;
-//   try {
-//     let dateFilter = {};
+// Contact Messages routes
+router.get("/contacts", async (req, res) => {
+  try {
+    const contacts = await Contact.find().sort({ createdAt: -1 });
 
-//     if (startDate && endDate) {
-//       dateFilter = {
-//         createdAt: {
-//           $gte: new Date(startDate),
-//           $lte: new Date(endDate),
-//         },
-//       };
-//     }
-//     const adminIds = await User.find(
-//       {
-//         accountType: "admin",
-//       },
-//       "_id",
-//     );
+    res.json({
+      success: true,
+      contacts,
+    });
+  } catch (error) {
+    console.error(error);
 
-//     const adminUserIds = adminIds.map((u) => u._id);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch contacts",
+    });
+  }
+});
 
-//     const reportData = [];
+router.patch("/contacts/:id/read", async (req, res) => {
+  try {
+    const contact = await Contact.findByIdAndUpdate(
+      req.params.id,
+      {
+        isRead: true,
+        status: "READ",
+      },
+      {
+        returnDocument: "after",
+      },
+    );
+    await logAdminAction(
+      req.user,
+      "CONTACT_MARK_READ",
+      contact.email,
+      "contact message is read",
+    );
+    res.json({
+      success: true,
+      contact,
+    });
+  } catch (error) {
+    console.error(error);
 
-//     // Technical Interview
+    res.status(500).json({
+      success: false,
+    });
+  }
+});
 
-//     const interviews = await InterviewSession.find({
-//       userId: {
-//         $nin: adminUserIds,
-//       },
-//       ...dateFilter,
-//     }).populate("userId", "name email");
+router.delete("/contacts/:id", async (req, res) => {
+  try {
+    const contact = await Contact.findById(req.params.id);
+    if (!contact) {
+      return res.status(404).json({
+        success: false,
+        message: "Contact not found",
+      });
+    }
+    await Contact.findByIdAndDelete(req.params.id);
+    await logAdminAction(
+      req.user,
+      "CONTACT_DELETED",
+      contact.email,
+      "Deleted contact message",
+    );
+    res.json({
+      success: true,
+    });
+  } catch (error) {
+    console.error(error);
 
-//     interviews.forEach((item) => {
-//       reportData.push({
-//         userName: item.userId?.name || "",
-//         email: item.userId?.email || "",
-//         module: "Technical Interview",
-//         score: item.totalScore || 0,
-//         status: item.completed ? "Completed" : "In Progress",
-//         date: item.completedAt || item.startedAt,
-//       });
-//     });
+    res.status(500).json({
+      success: false,
+    });
+  }
+});
 
-//     // JD Prep
+router.post("/contacts/:id/reply", async (req, res) => {
+  try {
+    const { reply } = req.body;
 
-//     const jdPrep = await JDPrepSession.find({
-//       userId: {
-//         $nin: adminUserIds,
-//       },
-//       ...dateFilter,
-//     }).populate("userId", "name email");
+    const contact = await Contact.findById(req.params.id);
 
-//     jdPrep.forEach((item) => {
-//       reportData.push({
-//         userName: item.userId?.name || "",
-//         email: item.userId?.email || "",
-//         module: "JD Prep",
-//         score: item.overallEvaluation?.overallScore || 0,
-//         status: item.status || "Completed",
-//         date: item.completedAt || item.createdAt,
-//       });
-//     });
+    if (!contact) {
+      return res.status(404).json({
+        success: false,
+        message: "Contact not found",
+      });
+    }
 
-//     // Communication
+    await sendContactReply(contact.email, contact.name, reply);
 
-//     const communication = await CommunicationSession.find({
-//       userId: {
-//         $nin: adminUserIds,
-//       },
-//       ...dateFilter,
-//     }).populate("userId", "name email");
+    await logAdminAction(
+      req.user,
+      "CONTACT_REPLY_SENT",
+      contact.email,
+      "Reply sent to contact message",
+    );
 
-//     communication.forEach((item) => {
-//       reportData.push({
-//         userName: item.userId?.name || "",
-//         email: item.userId?.email || "",
-//         module: "Communication",
-//         score: item.evaluation?.overall?.score || 0,
-//         status: "Completed",
-//         date: item.completedAt,
-//       });
-//     });
+    contact.status = "REPLIED";
+    contact.isRead = true;
+    contact.repliedAt = new Date();
+    contact.replies.push({
+      message: reply,
+    });
 
-//     // Email
+    await contact.save();
 
-//     const emails = await EmailSession.find({
-//       userId: {
-//         $nin: adminUserIds,
-//       },
-//       ...dateFilter,
-//     }).populate("userId", "name email");
+    res.json({
+      success: true,
+    });
+  } catch (error) {
+    console.error(error);
 
-//     emails.forEach((item) => {
-//       reportData.push({
-//         userName: item.userId?.name || "",
-//         email: item.userId?.email || "",
-//         module: "Email Writing",
-//         score: item.evaluation?.score || 0,
-//         status: "Completed",
-//         date: item.completedAt,
-//       });
-//     });
-
-//     // Aptitude
-
-//     const aptitude = await AptitudeSession.find({
-//       userId: {
-//         $nin: adminUserIds,
-//       },
-//       ...dateFilter,
-//     }).populate("userId", "name email");
-
-//     aptitude.forEach((item) => {
-//       reportData.push({
-//         userName: item.userId?.name || "",
-//         email: item.userId?.email || "",
-//         module: "Aptitude",
-//         score: item.percentage || 0,
-//         status: "Completed",
-//         date: item.completedAt,
-//       });
-//     });
-
-//     const fields = ["userName", "email", "module", "score", "status", "date"];
-
-//     const parser = new Parser({
-//       fields,
-//     });
-
-//     const csv = parser.parse(reportData);
-
-//     res.header("Content-Type", "text/csv");
-
-//     res.attachment("InterviewAI_Report.csv");
-
-//     return res.send(csv);
-//   } catch (error) {
-//     console.error(error);
-
-//     res.status(500).json({
-//       message: "Failed to export report",
-//     });
-//   }
-// });
+    res.status(500).json({
+      success: false,
+    });
+  }
+});
 
 // Profile Page
 router.get("/profile", auth, async (req, res) => {
@@ -1861,6 +2318,166 @@ router.get("/audit-logs", async (req, res) => {
 
     res.status(500).json({
       message: "Failed to fetch audit logs",
+    });
+  }
+});
+
+router.get("/global-search", async (req, res) => {
+  try {
+    const q = req.query.q?.trim();
+
+    if (!q) {
+      return res.json({
+        users: [],
+        sessions: [],
+        contacts: [],
+        analytics: [],
+        auditLogs: [],
+        counts: {
+          users: 0,
+          sessions: 0,
+          contacts: 0,
+          analytics: 0,
+          auditLogs: 0,
+        },
+      });
+    }
+
+    const regex = new RegExp(q, "i");
+
+    const [
+      users,
+      interviewSessions,
+      communicationSessions,
+      emailSessions,
+      aptitudeSessions,
+      jdPrepSessions,
+      contacts,
+      auditLogs,
+      analytics,
+    ] = await Promise.all([
+      User.find({
+        accountType: "user",
+        $or: [
+          { name: regex },
+          { email: regex },
+          { role: regex },
+          { technologyStack: regex },
+        ],
+      })
+        .select("name email role")
+        .limit(3),
+
+      InterviewSession.find({
+        $or: [
+          { role: regex },
+          { experienceLevel: regex },
+          { "questions.question": regex },
+        ],
+      })
+        .populate("userId", "name")
+        .limit(3),
+
+      CommunicationSession.find({
+        $or: [{ question: regex }, { transcript: regex }],
+      })
+        .populate("userId", "name")
+        .limit(3),
+
+      EmailSession.find({
+        $or: [{ scenarioTitle: regex }, { userEmail: regex }],
+      })
+        .populate("userId", "name")
+        .limit(3),
+
+      AptitudeSession.find({
+        $or: [{ topic: regex }, { "questions.questionText": regex }],
+      })
+        .populate("userId", "name")
+        .limit(3),
+
+      JDPrepSession.find({
+        $or: [
+          { jobDescription: regex },
+          { finalSkills: regex },
+          { "questions.question": regex },
+        ],
+      })
+        .populate("userId", "name")
+        .limit(3),
+
+      Contact.find({
+        $or: [{ name: regex }, { email: regex }, { message: regex }],
+      })
+        .select("name email message")
+        .limit(2),
+
+      AuditLog.find({
+        $or: [
+          { adminName: regex },
+          { action: regex },
+          { target: regex },
+          { details: regex },
+        ],
+      }).limit(2),
+
+      AIAnalytics.find({
+        $or: [{ provider: regex }, { module: regex }],
+      }).limit(2),
+    ]);
+
+    const sessions = [
+      ...interviewSessions.map((s) => ({
+        id: s._id,
+        user: s.userId?.name || "Unknown",
+        module: "Technical Interview",
+      })),
+
+      ...communicationSessions.map((s) => ({
+        id: s._id,
+        user: s.userId?.name || "Unknown",
+        module: "Communication",
+      })),
+
+      ...emailSessions.map((s) => ({
+        id: s._id,
+        user: s.userId?.name || "Unknown",
+        module: "Email",
+      })),
+
+      ...aptitudeSessions.map((s) => ({
+        id: s._id,
+        user: s.userId?.name || "Unknown",
+        module: "Aptitude",
+      })),
+
+      ...jdPrepSessions.map((s) => ({
+        id: s._id,
+        user: s.userId?.name || "Unknown",
+        module: "JD Prep",
+      })),
+    ].slice(0, 3);
+
+    res.json({
+      users,
+      sessions,
+      contacts,
+      analytics,
+      auditLogs,
+
+      counts: {
+        users: users.length,
+        sessions: sessions.length,
+        contacts: contacts.length,
+        analytics: analytics.length,
+        auditLogs: auditLogs.length,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: "Search failed",
     });
   }
 });

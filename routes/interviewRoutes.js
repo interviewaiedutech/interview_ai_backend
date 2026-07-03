@@ -4,6 +4,7 @@ const User = require("../models/User");
 const authMiddleware = require("../middleware/auth");
 const AIAnalytics = require("../models/AIAnalytics");
 const router = express.Router();
+const Notification = require("../models/Notification");
 
 // ============================================
 // FREE AI SETUP — Groq (primary) + Gemini (fallback)
@@ -64,8 +65,8 @@ const generateWithGroq = async (prompt, isJson = true) => {
       },
       { role: "user", content: prompt },
     ],
-    temperature: 0.2,
-    max_tokens: 600,
+    temperature: 0.4,
+    max_tokens: 750,
     ...(isJson && { response_format: { type: "json_object" } }),
   });
 
@@ -81,7 +82,7 @@ const generateWithGemini = async (prompt) => {
   if (!geminiApiKey) throw new Error("Gemini not configured");
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiApiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-latest:generateContent?key=${geminiApiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -89,8 +90,7 @@ const generateWithGemini = async (prompt) => {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 600,
-          responseMimeType: "application/json",
+          maxOutputTokens: 750,
         },
       }),
     },
@@ -133,7 +133,7 @@ const generateWithGitHub = async (prompt, isJson = true) => {
           { role: "user", content: prompt },
         ],
         temperature: 0.2,
-        max_tokens: 600,
+        max_tokens: 750,
       }),
     },
   );
@@ -162,13 +162,15 @@ const callFreeAI = async (
       name: "Groq",
       fn: () => generateWithGroq(prompt, isJson),
     });
-  if (geminiApiKey)
-    providers.push({ name: "Gemini", fn: () => generateWithGemini(prompt) });
+
   if (githubToken)
     providers.push({
       name: "GitHub Models",
       fn: () => generateWithGitHub(prompt, isJson),
     });
+
+  if (geminiApiKey)
+    providers.push({ name: "Gemini", fn: () => generateWithGemini(prompt) });
 
   for (const provider of providers) {
     try {
@@ -211,15 +213,42 @@ const safeParseJSON = (text) => {
 // ============================================
 // EVALUATE ANSWER
 // ============================================
-const evaluateAnswer = async (question, answer, category) => {
-  const prompt = `Evaluate this interview answer and return JSON only.
+const evaluateAnswer = async (
+  question,
+  answer,
+  category,
+  experienceLevel,
+  role,
+) => {
+  const prompt = `
+You are an experienced technical interviewer and mentor.
 
-      Question: ${question}
-      Category: ${category}
-      Answer: ${answer}
+Question: ${question}
+Category: ${category}
+Experience Level:${experienceLevel || "Beginner"}
+Role: ${role || "Software Developer"}
+Candidate's Answer: ${answer}
 
-      Return exactly this JSON:
-      {"score": <number 10-20>, "feedback": "your feedback about the answer"}`;
+Evaluate the answer carefully and return **JSON only** with this exact structure:
+
+{
+  "score": <number between 0 and 20>,
+  "feedback": "Write your feedback here, 
+      also includes(strengths - List 1-2 strengths (or 'None' if very poor answer)) 
+      and improvements(Specific suggestions on how to improve)"
+}
+
+Evaluation Guidelines:
+- For **Beginner** level: Be encouraging and kind. Focus on basics. Give constructive feedback even if the answer is weak.
+- For **Intermediate/Advanced/Expert**: Be more critical and detailed.
+- Score range: 0 to 20 (20 = perfect/excellent answer, 0 = completely irrelevant or blank).
+- Feedback should be professional, specific, and helpful.
+- Highlight what was good first, then point out gaps.
+- Suggest correct approach or key points they missed.
+- Keep feedback concise but actionable (2-6 sentences max).
+
+Do not add any text outside the JSON.
+`;
 
   try {
     const text = await callFreeAI(
@@ -257,12 +286,28 @@ const generateQuestionsWithAI = async (
     : "General";
 
   let experienceInstructions = "";
+  // Role-specific adjustment
+  let roleSpecificGuidance = "";
+
+  if (experienceLevel === "Beginner") {
+    roleSpecificGuidance = `
+    IMPORTANT: Questions must be suitable for a **${role}** at beginner level.
+    Use only basic concepts relevant to this role.
+    Do NOT assume knowledge of advanced frameworks unless they are core to the role.
+    For example:
+    - Frontend: Basic HTML, CSS, JavaScript only (no React unless specifically requested)
+    - Backend: Basic server logic, simple functions, databases basics
+    - DevOps: Basic commands, simple scripting
+    - Data Analyst: Basic Excel/SQL concepts, simple calculations
+    - Non-technical roles (HR, Sales, Content Writer): Focus on behavioral, situational, and basic domain questions.
+  `;
+  }
 
   if (experienceLevel === "Beginner") {
     experienceInstructions = `
-      Generate beginner-friendly questions.
+    Generate truly beginner-friendly questions for a ${role}.
 
-      Distribution:
+    Distribution:
       - 50% fundamentals
       - 20% practical coding
       - 15% debugging
@@ -275,35 +320,33 @@ const generateQuestionsWithAI = async (
       - Scalability discussions
       - Advanced architecture
 
-      Focus on:
-      - Core concepts
-      - Definitions
-      - Basic coding
-      - Real-world beginner scenarios
-      `;
+    ${roleSpecificGuidance}
+
+    STRICT BEGINNER RULES:
+    - Keep everything very simple.
+    - Use plain, everyday language.
+    - Avoid complex scenarios, business domains, or frameworks.
+    - Focus on foundational knowledge only.
+  `;
   }
 
   if (experienceLevel === "Intermediate") {
     experienceInstructions = `
-      Generate mid-level questions.
+      Generate mid-level questions suitable for a ${role}.
 
       Distribution:
       - 35% fundamentals
-      - 35% practical coding
+      - 35% practical / hands-on
       - 15% debugging
-      - 15% system design
+      - 15% basic system design / process
 
-      Focus on:
-      - Project experience
-      - API design
-      - Performance
-      - Architecture basics
+      Adapt questions to the ${role} responsibilities.
       `;
   }
 
   if (experienceLevel === "Advanced") {
     experienceInstructions = `
-      Generate senior-level questions.
+      Generate senior-level questions suitable for a ${role}.
 
       Distribution:
       - 25% coding
@@ -317,11 +360,12 @@ const generateQuestionsWithAI = async (
       - Design decisions
       - Tradeoffs
       - Production incidents
+    Adapt questions to the ${role} responsibilities.
       `;
   }
   if (experienceLevel === "Expert") {
     experienceInstructions = `
-      Generate principal engineer / staff engineer level questions.
+      Generate principal engineer / staff engineer level questions suitable for a ${role}..
 
       Distribution:
       - 30% system design
@@ -341,27 +385,44 @@ const generateQuestionsWithAI = async (
       - Cost optimization
 
       Assume the candidate has 6+ years experience.
+      Adapt questions to the ${role} responsibilities.
       `;
   }
+
+  const variationInstructions = `
+  Generate FRESH, UNIQUE questions every time.
+  Do not repeat common questions.
+  Vary scenarios, wording, and contexts.
+  Make them realistic for the given role.
+`;
+
   const prompt = `
-      You are a Principal Engineer.
+  You are a Principal Engineer.
 
       Candidate:
       - Role: ${role}
       - Experience: ${experienceLevel}
-      - Tech Stack: ${techStr}
+      - Tech Stack / Skills: ${techStr || "General skills for this role"}
 
       ${experienceInstructions}
 
-      Return JSON only.
+      ${variationInstructions}
+
+  Rules for all questions:
+  - Questions must be highly relevant to the role of ${role}.
+  - For technical roles, focus on relevant technologies from the tech stack.
+  - For non-technical roles (HR, Sales, Content Writer, etc.), focus more on behavioral, situational, communication, and domain-specific questions.
+  - Keep beginner questions very basic. Increase complexity only as per experience level.
+
+      Return JSON only. Do not include any explanation.
       {
         "questions": [
           {
             "id": 1,
-            "text": "Write a function to check whether given string is palindrome or not?",
-            "category": "coding",
-            "difficulty": "Easy",
-            "focus": "java_fundamentals"
+            "text": "Question text here",
+            "category": "fundamentals | coding | debugging | behavioral | system_design",
+            "difficulty": "Easy | Medium | Hard",
+            "focus": "javascript_basics | sql | git | leadership etc."
           }
         ]
       }
@@ -547,7 +608,8 @@ router.post("/start-session", authMiddleware, async (req, res) => {
 // Submit answer
 router.post("/submit-answer", authMiddleware, async (req, res) => {
   try {
-    const { sessionId, questionIndex, answer } = req.body;
+    const { sessionId, questionIndex, answer, experienceLevel, role } =
+      req.body;
 
     const session = await InterviewSession.findOne({
       _id: sessionId,
@@ -561,7 +623,13 @@ router.post("/submit-answer", authMiddleware, async (req, res) => {
       q.answer = answer;
       q.timestamp = new Date();
       console.log("tech interview answer: ", answer);
-      const evaluation = await evaluateAnswer(q.question, answer, q.category);
+      const evaluation = await evaluateAnswer(
+        q.question,
+        answer,
+        q.category,
+        experienceLevel || session.experienceLevel,
+        role || session.role,
+      );
       q.score = evaluation.score;
       q.feedback = evaluation.feedback;
 
@@ -579,7 +647,12 @@ router.post("/submit-answer", authMiddleware, async (req, res) => {
 // Complete session
 router.post("/complete-session", authMiddleware, async (req, res) => {
   try {
-    const { sessionId } = req.body;
+    const {
+      sessionId,
+      status = "completed",
+      tabViolations = 0,
+      focusViolations = 0,
+    } = req.body;
 
     const session = await InterviewSession.findOne({
       _id: sessionId,
@@ -589,50 +662,84 @@ router.post("/complete-session", authMiddleware, async (req, res) => {
       return res.status(404).json({ message: "InterviewSession not found" });
 
     session.completed = true;
+    session.status = status;
+
+    session.tabViolations = tabViolations;
+
+    session.focusViolations = focusViolations;
+
+    const answeredQuestions = session.questions.filter((q) => q.answer);
+    session.questionsAttempted = answeredQuestions.length;
+
     session.completedAt = new Date();
     const earnedScore = session.questions.reduce(
       (sum, q) => sum + (q.score || 0),
       0,
     );
 
-    const maxScore = session.questions.length * 20;
+    const maxScore = answeredQuestions.length * 20;
 
-    session.totalScore = Math.round((earnedScore / maxScore) * 100);
+    session.totalScore =
+      maxScore > 0 ? Math.round((earnedScore / maxScore) * 100) : 0;
 
     await session.save();
 
-    // Update user streak
+    //notification
     const user = await User.findById(req.userId);
-    if (user) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const lastActive = user.streak.lastActiveDate
-        ? new Date(user.streak.lastActiveDate)
-        : null;
 
-      if (lastActive) {
-        lastActive.setHours(0, 0, 0, 0);
-        const diffDays = Math.floor(
-          (today - lastActive) / (1000 * 60 * 60 * 24),
-        );
-        if (diffDays === 1) user.streak.currentStreak += 1;
-        else if (diffDays > 1) user.streak.currentStreak = 1;
-      } else {
-        user.streak.currentStreak = 1;
+    await Notification.create({
+      title:
+        status === "terminated"
+          ? "Interview Terminated"
+          : "Interview Completed",
+      message:
+        status === "terminated"
+          ? `${user.name} interview terminated due to integrity violations`
+          : `${user.name} completed Technical Interview`,
+      type: "interview",
+      userId: req.userId,
+      entityId: sessionId,
+      entityType: "interview",
+    });
+
+    // Update user streak
+    if (status === "completed") {
+      if (user) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const lastActive = user.streak.lastActiveDate
+          ? new Date(user.streak.lastActiveDate)
+          : null;
+
+        if (lastActive) {
+          lastActive.setHours(0, 0, 0, 0);
+          const diffDays = Math.floor(
+            (today - lastActive) / (1000 * 60 * 60 * 24),
+          );
+          if (diffDays === 1) user.streak.currentStreak += 1;
+          else if (diffDays > 1) user.streak.currentStreak = 1;
+        } else {
+          user.streak.currentStreak = 1;
+        }
+
+        if (user.streak.currentStreak > user.streak.longestStreak) {
+          user.streak.longestStreak = user.streak.currentStreak;
+        }
+
+        user.streak.lastActiveDate = today;
+        user.streak.streakHistory.push({ date: today, sessionsCompleted: 1 });
+        await user.save();
       }
-
-      if (user.streak.currentStreak > user.streak.longestStreak) {
-        user.streak.longestStreak = user.streak.currentStreak;
-      }
-
-      user.streak.lastActiveDate = today;
-      user.streak.streakHistory.push({ date: today, sessionsCompleted: 1 });
-      await user.save();
     }
 
     res.json({
       success: true,
       score: session.totalScore,
+      status: session.status,
+
+      attempted: session.questionsAttempted,
+
+      totalQuestions: session.questions.length,
       totalPossible: session.questions.length * 20,
     });
   } catch (error) {

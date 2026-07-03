@@ -5,6 +5,7 @@ const EmailSession = require("../models/EmailSession");
 const User = require("../models/User");
 const AIAnalytics = require("../models/AIAnalytics");
 const router = express.Router();
+const Notification = require("../models/Notification");
 
 // ============================================
 // FREE AI SETUP (Same as other modules)
@@ -56,29 +57,9 @@ const callFreeAI = async (prompt, moduleName = "Email", isJson = true) => {
     });
   }
 
-  if (geminiApiKey) {
-    providers.push({
-      name: "Gemini",
-      fn: async () => {
-        const response = await axios.post(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
-          {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 700,
-              responseMimeType: "application/json",
-            },
-          },
-        );
-        return response.data.candidates[0].content.parts[0].text;
-      },
-    });
-  }
-
   if (githubToken) {
     providers.push({
-      name: "GitHub",
+      name: "GitHub Models",
       fn: async () => {
         const response = await axios.post(
           "https://models.inference.ai.azure.com/chat/completions",
@@ -91,6 +72,26 @@ const callFreeAI = async (prompt, moduleName = "Email", isJson = true) => {
           { headers: { Authorization: `Bearer ${githubToken}` } },
         );
         return response.data.choices[0].message.content;
+      },
+    });
+  }
+
+  if (geminiApiKey) {
+    providers.push({
+      name: "Gemini",
+      fn: async () => {
+        const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+          {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 700,
+              responseMimeType: "application/json",
+            },
+          },
+        );
+        return response.data.candidates[0].content.parts[0].text;
       },
     });
   }
@@ -330,6 +331,18 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
   } catch (dbError) {
     console.error("Database save error:", dbError.message);
   }
+
+  //notification
+  const user = await User.findById(req.userId);
+
+  await Notification.create({
+    title: "Email Practice Completed",
+    message: `${user?.name || "User"} completed Email Practice`,
+    type: "email",
+    userId: req.userId,
+    entityId: sessionId,
+    entityType: "email",
+  });
 
   // Update user stats
   try {

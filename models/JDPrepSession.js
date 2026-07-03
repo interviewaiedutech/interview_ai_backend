@@ -139,8 +139,23 @@ const jdPrepSessionSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ["in-progress", "completed", "abandoned"],
+    enum: ["in-progress", "completed", "terminated", "abandoned"],
     default: "in-progress",
+  },
+
+  tabViolations: {
+    type: Number,
+    default: 0,
+  },
+
+  focusViolations: {
+    type: Number,
+    default: 0,
+  },
+
+  integrityScore: {
+    type: Number,
+    default: 100,
   },
 
   // Metadata

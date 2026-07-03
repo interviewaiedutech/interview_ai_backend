@@ -45,6 +45,27 @@ const InterviewSessionSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  status: {
+    type: String,
+    enum: ["completed", "terminated", "abandoned"],
+    default: "completed",
+  },
+
+  tabViolations: {
+    type: Number,
+    default: 0,
+  },
+
+  focusViolations: {
+    type: Number,
+    default: 0,
+  },
+
+  questionsAttempted: {
+    type: Number,
+    default: 0,
+  },
+
   totalScore: {
     type: Number,
     default: 0,

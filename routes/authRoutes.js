@@ -5,6 +5,7 @@ const sendVerificationEmail = require("../utils/sendVerificationEmail");
 const sendPasswordResetEmail = require("../utils/sendPasswordResetEmail");
 const passport = require("passport");
 const AuditLog = require("../models/AuditLog");
+const bcrypt = require("bcryptjs");
 const router = express.Router();
 
 // REGISTER - Create new user account (Simplified version)
@@ -238,15 +239,15 @@ router.post("/login", async (req, res) => {
       { expiresIn: "7d" },
     );
 
-    if (user.accountType === "admin") {
-      await AuditLog.create({
-        adminId: user._id,
-        adminName: user.name,
-        action: "ADMIN_LOGIN",
-        target: user.email,
-        details: "Admin logged in",
-      });
-    }
+    // if (user.accountType === "admin") {
+    //   await AuditLog.create({
+    //     adminId: user._id,
+    //     adminName: user.name,
+    //     action: "ADMIN_LOGIN",
+    //     target: user.email,
+    //     details: "Admin logged in",
+    //   });
+    // }
 
     res.json({
       message: "Login successful",
@@ -407,6 +408,72 @@ router.post("/reset-password", async (req, res) => {
     res.status(400).json({
       success: false,
       message: "Invalid or expired reset link",
+    });
+  }
+});
+
+router.put("/change-password", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+
+    if (!token) {
+      return res.status(401).json({
+        message: "No token provided",
+      });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secretkey");
+
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        message: "All fields are required",
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        message: "Password must be at least 8 characters",
+      });
+    }
+
+    const user = await User.findById(decoded.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    // Google/Github users
+    if (user.provider !== "local") {
+      return res.status(400).json({
+        message: "Password change is not available for social login accounts",
+      });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        message: "Current password is incorrect",
+      });
+    }
+
+    user.password = newPassword;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Password updated successfully",
+    });
+  } catch (error) {
+    console.error("Change password error:", error);
+
+    res.status(500).json({
+      message: "Server error",
     });
   }
 });

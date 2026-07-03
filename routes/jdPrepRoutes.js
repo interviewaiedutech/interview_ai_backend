@@ -6,6 +6,7 @@ const User = require("../models/User");
 const AIAnalytics = require("../models/AIAnalytics");
 
 const router = express.Router();
+const Notification = require("../models/Notification");
 
 // ============================================
 // AI CLIENT SETUP
@@ -57,29 +58,9 @@ const callFreeAI = async (prompt, moduleName = "JD Prep", isJson = true) => {
     });
   }
 
-  if (geminiApiKey) {
-    providers.push({
-      name: "Gemini",
-      fn: async () => {
-        const response = await axios.post(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiApiKey}`,
-          {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: 800,
-              responseMimeType: "application/json",
-            },
-          },
-        );
-        return response.data.candidates[0].content.parts[0].text;
-      },
-    });
-  }
-
   if (githubToken) {
     providers.push({
-      name: "GitHub",
+      name: "GitHub Models",
       fn: async () => {
         const response = await axios.post(
           "https://models.inference.ai.azure.com/chat/completions",
@@ -92,6 +73,25 @@ const callFreeAI = async (prompt, moduleName = "JD Prep", isJson = true) => {
           { headers: { Authorization: `Bearer ${githubToken}` } },
         );
         return response.data.choices[0].message.content;
+      },
+    });
+  }
+  if (geminiApiKey) {
+    providers.push({
+      name: "Gemini",
+      fn: async () => {
+        const response = await axios.post(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-latest:generateContent?key=${geminiApiKey}`,
+          {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 800,
+              responseMimeType: "application/json",
+            },
+          },
+        );
+        return response.data.candidates[0].content.parts[0].text;
       },
     });
   }
@@ -379,7 +379,7 @@ router.post("/process", authMiddleware, async (req, res) => {
 // 2. EVALUATE ANSWERS + UPDATE USER STATS
 // ============================================
 router.post("/evaluate", authMiddleware, async (req, res) => {
-  const { sessionId, answers } = req.body;
+  const { sessionId, answers = [] } = req.body;
 
   try {
     const session = await JDPrepSession.findOne({
@@ -395,21 +395,6 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
       .map((a) => `Q: ${a.questionText}\nA: ${a.transcript}`)
       .join("\n\n");
 
-    //     const prompt = `Evaluate the candidate's performance for this Job Description.
-
-    // Job Description Summary: ${session.jobDescription.substring(0, 500)}...
-
-    // Candidate Answers:
-    // ${allAnswersText}
-
-    // Return ONLY valid JSON:
-    // {
-    //   "overallScore": 78,
-    //   "jdAlignmentScore": 82,
-    //   "strengths": ["Good communication", "Technical depth"],
-    //   "improvements": ["Add more specific examples", "Improve structure"],
-    //   "summaryFeedback": "Overall good performance with room for improvement in..."
-    // }`;
     const prompt = `
       Evaluate candidate answers for this role.
 
@@ -451,6 +436,7 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
       const aiText = await callFreeAI(prompt, true);
 
       parsed = safeParseJSON(aiText);
+      console.log("jd evaluation", parsed);
     } catch (err) {
       console.error("AI evaluation failed:", err.message);
     }
@@ -459,22 +445,14 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
     if (!parsed) {
       parsed = {
         overallScore: 65,
-
         summaryFeedback: "Good attempt. Keep practicing.",
-
         strengths: ["Communication"],
-
         improvements: ["Add more examples"],
-
         questionFeedback: answers.map((a) => ({
           questionText: a.questionText,
-
           score: 60,
-
           aiFeedback: "Good answer. Add more technical depth.",
-
           strengths: ["Clear explanation"],
-
           improvements: ["Use examples"],
         })),
       };
@@ -513,11 +491,34 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
     };
     session.overallEvaluation = evaluation;
     session.currentStep = "evaluation";
-    session.questionsAttempted = answers.length;
+    if (session.status !== "terminated") {
+      session.status = "completed";
+    }
+    session.questionsAttempted = Math.max(
+      session.questionsAttempted || 0,
+      answers.length,
+    );
     await session.save();
 
-    // === UPDATE USER STATS ===
+    //notification
     const user = await User.findById(req.userId);
+
+    await Notification.create({
+      title:
+        session.status === "terminated"
+          ? "JD Prep Terminated"
+          : "JD Prep Completed",
+      message:
+        session.status === "terminated"
+          ? `${user?.name || "User"} terminated JD preparation`
+          : `${user?.name || "User"} completed JD Preparation`,
+      type: "jdprep",
+      userId: req.userId,
+      entityId: sessionId,
+      entityType: "jdprep",
+    });
+
+    // === UPDATE USER STATS ===
     if (user) {
       if (!user.jdPrepStats) {
         user.jdPrepStats = {
@@ -532,7 +533,9 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
 
       const score = evaluation.overallScore || 0;
       user.jdPrepStats.totalSessions += 1;
-      user.jdPrepStats.completedSessions += 1;
+      if (session.status === "completed") {
+        user.jdPrepStats.completedSessions += 1;
+      }
       user.jdPrepStats.lastPracticeDate = new Date();
       user.jdPrepStats.totalTimeSpent += answers.reduce(
         (sum, a) => sum + (a.duration || 0),
@@ -559,7 +562,46 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
     res.status(500).json({ success: false, message: "Evaluation failed" });
   }
 });
+router.post("/terminate", authMiddleware, async (req, res) => {
+  try {
+    const { sessionId, tabViolations, focusViolations, attemptedQuestions } =
+      req.body;
 
+    const session = await JDPrepSession.findOne({
+      _id: sessionId,
+      userId: req.userId,
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+      });
+    }
+
+    session.status = "terminated";
+    session.currentStep = "evaluation";
+
+    session.tabViolations = tabViolations;
+
+    session.focusViolations = focusViolations;
+
+    session.questionsAttempted = attemptedQuestions;
+
+    session.completedAt = new Date();
+
+    await session.save();
+
+    res.json({
+      success: true,
+    });
+  } catch (err) {
+    console.log(err);
+
+    res.status(500).json({
+      success: false,
+    });
+  }
+});
 // ============================================
 // 3. RECOMMENDATIONS
 // ============================================
@@ -688,7 +730,9 @@ router.post("/recommendations", authMiddleware, async (req, res) => {
     });
     session.learningRecommendations = recommendations;
     session.currentStep = "completed";
-    session.status = "completed";
+    if (session.status !== "terminated") {
+      session.status = "completed";
+    }
     session.completedAt = new Date();
     await session.save();
 
