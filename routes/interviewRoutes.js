@@ -241,7 +241,7 @@ Evaluate the answer carefully and return **JSON only** with this exact structure
 Evaluation Guidelines:
 - For **Beginner** level: Be encouraging and kind. Focus on basics. Give constructive feedback even if the answer is weak.
 - For **Intermediate/Advanced/Expert**: Be more critical and detailed.
-- Score range: 0 to 20 (20 = perfect/excellent answer, 0 = completely irrelevant or blank).
+- Score range: 0 to 10 (10 = perfect/excellent answer, 0 = completely irrelevant or blank).
 - Feedback should be professional, specific, and helpful.
 - Highlight what was good first, then point out gaps.
 - Suggest correct approach or key points they missed.

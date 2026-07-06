@@ -397,7 +397,14 @@ router.get("/", authMiddleware, async (req, res) => {
         title: s.role || "Technical Interview",
         score: s.totalScore || 0,
         completedAt: s.completedAt,
-        questions: s.questions || [],
+        questions:
+          s.questions?.map((q) => ({
+            question: q.question,
+            answer: q.answer || "",
+            feedback: q.feedback || "",
+            score: q.score || 0,
+            category: q.category || "technical",
+          })) || [],
       })),
 
       ...commSessions.map((s) => ({

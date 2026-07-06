@@ -267,7 +267,14 @@ router.get("/dashboard", async (req, res) => {
         user: s.userId?.name || "Unknown",
         module: "Technical",
         score: s.totalScore || 0,
-        status: s.completed ? "Completed" : "In Progress",
+        status:
+          s.status === "terminated"
+            ? "Terminated"
+            : s.status === "abandoned"
+              ? "Abandoned"
+              : s.completed
+                ? "Completed"
+                : "In Progress",
         date: s.startedAt,
       })),
 
@@ -303,7 +310,15 @@ router.get("/dashboard", async (req, res) => {
         user: s.userId?.name || "Unknown",
         module: "JD Prep",
         score: Math.round(s.overallEvaluation?.overallScore || 0),
-        status: "Completed",
+        status:
+          s.status === "terminated"
+            ? "Terminated"
+            : s.status === "abandoned"
+              ? "Abandoned"
+              : s.status === "completed"
+                ? "Completed"
+                : "In Progress",
+
         date: s.createdAt,
       })),
     ];
@@ -859,7 +874,14 @@ router.get("/sessions", async (req, res) => {
         module: "Technical Interview",
         score: s.totalScore || 0,
         questions: s.questions?.length || 0,
-        status: s.completed ? "Completed" : "In Progress",
+        status:
+          s.status === "terminated"
+            ? "Terminated"
+            : s.status === "abandoned"
+              ? "Abandoned"
+              : s.completed
+                ? "Completed"
+                : "In Progress",
         date: s.completedAt || s.startedAt,
       });
     });
@@ -872,7 +894,14 @@ router.get("/sessions", async (req, res) => {
         module: "JD Prep",
         score: s.overallEvaluation?.overallScore || 0,
         questions: s.questions?.length || 0,
-        status: s.status,
+        status:
+          s.status === "terminated"
+            ? "Terminated"
+            : s.status === "abandoned"
+              ? "Abandoned"
+              : s.status === "completed"
+                ? "Completed"
+                : "In Progress",
         date: s.completedAt || s.createdAt,
       });
     });
