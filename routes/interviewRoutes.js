@@ -232,7 +232,7 @@ Candidate's Answer: ${answer}
 Evaluate the answer carefully and return **JSON only** with this exact structure:
 
 {
-  "score": <number between 0 and 20>,
+  "score": <number between 0 and 10>,
   "feedback": "Write your feedback here, 
       also includes(strengths - List 1-2 strengths (or 'None' if very poor answer)) 
       and improvements(Specific suggestions on how to improve)"
@@ -259,7 +259,7 @@ Do not add any text outside the JSON.
     const parsed = safeParseJSON(text);
     if (parsed && typeof parsed.score === "number") {
       return {
-        score: Math.min(20, Math.max(0, parsed.score)),
+        score: Math.min(10, Math.max(0, parsed.score)),
         feedback: parsed.feedback || "Good attempt",
       };
     }
@@ -309,7 +309,7 @@ const generateQuestionsWithAI = async (
 
     Distribution:
       - 50% fundamentals
-      - 20% practical coding
+      - 20% coding
       - 15% debugging
       - 15% behavioral
 
@@ -677,7 +677,7 @@ router.post("/complete-session", authMiddleware, async (req, res) => {
       0,
     );
 
-    const maxScore = answeredQuestions.length * 20;
+    const maxScore = answeredQuestions.length * 10;
 
     session.totalScore =
       maxScore > 0 ? Math.round((earnedScore / maxScore) * 100) : 0;
@@ -740,7 +740,7 @@ router.post("/complete-session", authMiddleware, async (req, res) => {
       attempted: session.questionsAttempted,
 
       totalQuestions: session.questions.length,
-      totalPossible: session.questions.length * 20,
+      totalPossible: session.questions.length * 10,
     });
   } catch (error) {
     console.error(error);

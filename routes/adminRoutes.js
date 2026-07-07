@@ -1350,6 +1350,71 @@ router.get("/ai-analytics", async (req, res) => {
     const geminiTrend = calculateGrowth(geminiRequests, previousGeminiRequests);
     const githubTrend = calculateGrowth(githubRequests, previousGithubRequests);
 
+    const groupFormat = range === "24h" ? "%H:00" : "%Y-%m-%d";
+
+    const requestsOverTime = await AIAnalytics.aggregate([
+      {
+        $match: {
+          createdAt: {
+            $gte: currentStart,
+          },
+        },
+      },
+
+      {
+        $group: {
+          _id: {
+            date: {
+              $dateToString: {
+                format: groupFormat,
+                date: "$createdAt",
+              },
+            },
+
+            provider: "$provider",
+          },
+
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+
+      {
+        $sort: {
+          "_id.date": 1,
+        },
+      },
+    ]);
+
+    const seriesMap = {};
+
+    requestsOverTime.forEach((item) => {
+      const date = item._id.date;
+
+      if (!seriesMap[date]) {
+        seriesMap[date] = {
+          date,
+
+          groq: 0,
+
+          gemini: 0,
+
+          github: 0,
+        };
+      }
+
+      if (item._id.provider === "Groq") {
+        seriesMap[date].groq = item.count;
+      } else if (item._id.provider === "Gemini") {
+        seriesMap[date].gemini = item.count;
+      } else if (item._id.provider === "GitHub Models") {
+        seriesMap[date].github = item.count;
+      }
+    });
+
+    const timeSeries = Object.values(seriesMap);
+
     res.json({
       totalRequests,
       groqRequests,
@@ -1364,6 +1429,8 @@ router.get("/ai-analytics", async (req, res) => {
       successRate,
       failureRate,
       avgResponseTime: avgResponse[0]?.avgTime || 0,
+
+      timeSeries,
     });
   } catch (error) {
     console.error(error);
