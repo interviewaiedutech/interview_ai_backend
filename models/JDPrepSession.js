@@ -139,7 +139,7 @@ const jdPrepSessionSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ["in-progress", "completed", "terminated", "abandoned"],
+    enum: ["in-progress", "completed", "ended", "terminated", "abandoned"],
     default: "in-progress",
   },
 

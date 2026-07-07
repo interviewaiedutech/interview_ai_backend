@@ -15,6 +15,23 @@ const communicationSessionSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
+  status: {
+    type: String,
+    enum: ["in-progress", "completed", "terminated", "ended"],
+    default: "in-progress",
+  },
+  questionsAttempted: {
+    type: Number,
+    default: 0,
+  },
+  tabViolations: {
+    type: Number,
+    default: 0,
+  },
+  focusViolations: {
+    type: Number,
+    default: 0,
+  },
   question: {
     type: String,
     required: true,

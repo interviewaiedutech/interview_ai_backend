@@ -480,6 +480,7 @@ router.post("/session/start", authMiddleware, async (req, res) => {
     moduleType,
     subModule,
     question,
+    status: "in-progress",
     completedAt: null,
   });
 
@@ -505,13 +506,22 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
     evaluation = getFallbackEvaluation(transcript);
   }
 
+  const user = await User.findById(req.userId);
+  let title = "Communication Practice Completed";
+
+  let message = `${user?.name || "User"} completed ${moduleType}`;
+
   // Save session
   if (sessionId) {
     const session = await CommunicationSession.findOne({
       _id: sessionId,
       userId: req.userId,
     });
+
     if (session) {
+      if (session.status === "in-progress") {
+        session.status = "completed";
+      }
       session.transcript = transcript;
       session.evaluation = evaluation;
       session.duration = duration;
@@ -519,14 +529,22 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
       session.completedAt = new Date();
       await session.save();
     }
+
+    // notification
+    if (session?.status === "ended") {
+      title = "Communication Practice Ended";
+      message = `${user?.name || "User"} ended ${moduleType}`;
+    }
+
+    if (session?.status === "terminated") {
+      title = "Communication Practice Terminated";
+      message = `${user?.name || "User"} terminated ${moduleType}`;
+    }
   }
 
-  // notification
-  const user = await User.findById(req.userId);
-
   await Notification.create({
-    title: "Communication Practice Completed",
-    message: `${user?.name || "User"} completed ${moduleType}`,
+    title,
+    message,
     type: "communication",
     userId: req.userId,
     entityId: sessionId,
@@ -573,10 +591,100 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
   });
 });
 
+router.post("/terminate", authMiddleware, async (req, res) => {
+  try {
+    const {
+      sessionId,
+
+      tabViolations,
+
+      focusViolations,
+    } = req.body;
+
+    const session = await CommunicationSession.findOne({
+      _id: sessionId,
+
+      userId: req.userId,
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+      });
+    }
+
+    session.status = "terminated";
+
+    session.tabViolations = tabViolations;
+
+    session.focusViolations = focusViolations;
+
+    session.completedAt = new Date();
+
+    await session.save();
+
+    res.json({
+      success: true,
+    });
+  } catch (err) {
+    console.log(err);
+
+    res.status(500).json({
+      success: false,
+    });
+  }
+});
+
+router.post("/end", authMiddleware, async (req, res) => {
+  try {
+    const {
+      sessionId,
+
+      tabViolations,
+
+      focusViolations,
+    } = req.body;
+
+    const session = await CommunicationSession.findOne({
+      _id: sessionId,
+
+      userId: req.userId,
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+      });
+    }
+
+    session.status = "ended";
+
+    session.tabViolations = tabViolations;
+
+    session.focusViolations = focusViolations;
+
+    session.completedAt = new Date();
+
+    await session.save();
+
+    res.json({
+      success: true,
+    });
+  } catch (err) {
+    console.log(err);
+
+    res.status(500).json({
+      success: false,
+    });
+  }
+});
+
 router.get("/sessions/history", authMiddleware, async (req, res) => {
   const sessions = await CommunicationSession.find({
     userId: req.userId,
-    completedAt: { $ne: null },
+    status: {
+      $in: ["completed", "terminated", "ended"],
+    },
   })
     .sort({ completedAt: -1 })
     .limit(20);

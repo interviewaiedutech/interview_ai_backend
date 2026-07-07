@@ -270,11 +270,13 @@ router.get("/dashboard", async (req, res) => {
         status:
           s.status === "terminated"
             ? "Terminated"
-            : s.status === "abandoned"
-              ? "Abandoned"
-              : s.completed
-                ? "Completed"
-                : "In Progress",
+            : s.status === "ended"
+              ? "Ended"
+              : s.status === "abandoned"
+                ? "Abandoned"
+                : s.status === "completed"
+                  ? "Completed"
+                  : "In Progress",
         date: s.startedAt,
       })),
 
@@ -292,7 +294,14 @@ router.get("/dashboard", async (req, res) => {
         user: s.userId?.name || "Unknown",
         module: "Communication",
         score: Math.round(s.evaluation?.overall?.score || 0),
-        status: "Completed",
+        status:
+          s.status === "terminated"
+            ? "Terminated"
+            : s.status === "ended"
+              ? "Ended"
+              : s.status === "completed"
+                ? "Completed"
+                : "In Progress",
         date: s.completedAt,
       })),
 
@@ -313,11 +322,13 @@ router.get("/dashboard", async (req, res) => {
         status:
           s.status === "terminated"
             ? "Terminated"
-            : s.status === "abandoned"
-              ? "Abandoned"
-              : s.status === "completed"
-                ? "Completed"
-                : "In Progress",
+            : s.status === "ended"
+              ? "Ended"
+              : s.status === "abandoned"
+                ? "Abandoned"
+                : s.status === "completed"
+                  ? "Completed"
+                  : "In Progress",
 
         date: s.createdAt,
       })),
@@ -818,6 +829,25 @@ Sessions page
 =========================================
 */
 
+const formatStatus = (status) => {
+  switch (status) {
+    case "completed":
+      return "Completed";
+
+    case "ended":
+      return "Ended";
+
+    case "terminated":
+      return "Terminated";
+
+    case "abandoned":
+      return "Abandoned";
+
+    default:
+      return "In Progress";
+  }
+};
+
 router.get("/sessions", async (req, res) => {
   try {
     const adminIds = await User.find({ accountType: "admin" }, "_id");
@@ -874,14 +904,7 @@ router.get("/sessions", async (req, res) => {
         module: "Technical Interview",
         score: s.totalScore || 0,
         questions: s.questions?.length || 0,
-        status:
-          s.status === "terminated"
-            ? "Terminated"
-            : s.status === "abandoned"
-              ? "Abandoned"
-              : s.completed
-                ? "Completed"
-                : "In Progress",
+        status: formatStatus(s.status),
         date: s.completedAt || s.startedAt,
       });
     });
@@ -894,14 +917,7 @@ router.get("/sessions", async (req, res) => {
         module: "JD Prep",
         score: s.overallEvaluation?.overallScore || 0,
         questions: s.questions?.length || 0,
-        status:
-          s.status === "terminated"
-            ? "Terminated"
-            : s.status === "abandoned"
-              ? "Abandoned"
-              : s.status === "completed"
-                ? "Completed"
-                : "In Progress",
+        status: formatStatus(s.status),
         date: s.completedAt || s.createdAt,
       });
     });
@@ -914,7 +930,7 @@ router.get("/sessions", async (req, res) => {
         module: "Communication",
         score: s.evaluation?.overall?.score || 0,
         questions: 1,
-        status: "Completed",
+        status: formatStatus(s.status),
         date: s.completedAt,
       });
     });
@@ -1057,19 +1073,12 @@ router.get("/sessions/:id", async (req, res) => {
     if (session) {
       return res.json({
         type: "Technical Interview",
-
         _id: session._id,
-
         user: session.userId?.name,
-
         email: session.userId?.email,
-
         score: session.totalScore,
-
-        status: session.completed ? "Completed" : "In Progress",
-
+        status: formatStatus(session.status),
         date: session.completedAt || session.startedAt,
-
         questions: session.questions || [],
       });
     }
@@ -1084,21 +1093,13 @@ router.get("/sessions/:id", async (req, res) => {
     if (session) {
       return res.json({
         type: "JD Prep",
-
         _id: session._id,
-
         user: session.userId?.name,
-
         email: session.userId?.email,
-
         score: session.overallEvaluation?.overallScore || 0,
-
-        status: session.status,
-
+        status: formatStatus(session.status),
         date: session.completedAt || session.createdAt,
-
         questions: session.questions || [],
-
         overallEvaluation: session.overallEvaluation,
       });
     }
@@ -1113,23 +1114,14 @@ router.get("/sessions/:id", async (req, res) => {
     if (session) {
       return res.json({
         type: "Communication",
-
         _id: session._id,
-
         user: session.userId?.name,
-
         email: session.userId?.email,
-
         score: session.evaluation?.overall?.score || 0,
-
-        status: "Completed",
-
+        status: formatStatus(session.status),
         date: session.completedAt,
-
         question: session.question,
-
         transcript: session.transcript,
-
         evaluation: session.evaluation,
       });
     }
@@ -1144,21 +1136,13 @@ router.get("/sessions/:id", async (req, res) => {
     if (session) {
       return res.json({
         type: "Email",
-
         _id: session._id,
-
         user: session.userId?.name,
-
         email: session.userId?.email,
-
         score: session.evaluation?.score || 0,
-
         status: "Completed",
-
         date: session.completedAt,
-
         emailContent: session.userEmail,
-
         feedback: session.evaluation?.feedback,
       });
     }
@@ -1173,19 +1157,12 @@ router.get("/sessions/:id", async (req, res) => {
     if (session) {
       return res.json({
         type: "Aptitude",
-
         _id: session._id,
-
         user: session.userId?.name,
-
         email: session.userId?.email,
-
         score: session.percentage,
-
         status: "Completed",
-
         date: session.completedAt,
-
         questions: session.questions || [],
       });
     }

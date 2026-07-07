@@ -491,7 +491,7 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
     };
     session.overallEvaluation = evaluation;
     session.currentStep = "evaluation";
-    if (session.status !== "terminated") {
+    if (session.status !== "terminated" && session.status !== "ended") {
       session.status = "completed";
     }
     session.questionsAttempted = Math.max(
@@ -502,16 +502,24 @@ router.post("/evaluate", authMiddleware, async (req, res) => {
 
     //notification
     const user = await User.findById(req.userId);
+    let title = "JD Prep Completed";
 
+    let message = `${user?.name || "User"} completed JD Preparation`;
+
+    if (session.status === "ended") {
+      title = "JD Prep Ended";
+
+      message = `${user?.name || "User"} ended JD Preparation`;
+    }
+
+    if (session.status === "terminated") {
+      title = "JD Prep Terminated";
+
+      message = `${user?.name || "User"} terminated JD preparation`;
+    }
     await Notification.create({
-      title:
-        session.status === "terminated"
-          ? "JD Prep Terminated"
-          : "JD Prep Completed",
-      message:
-        session.status === "terminated"
-          ? `${user?.name || "User"} terminated JD preparation`
-          : `${user?.name || "User"} completed JD Preparation`,
+      title,
+      message,
       type: "jdprep",
       userId: req.userId,
       entityId: sessionId,
@@ -602,6 +610,57 @@ router.post("/terminate", authMiddleware, async (req, res) => {
     });
   }
 });
+
+router.post("/end", authMiddleware, async (req, res) => {
+  try {
+    const {
+      sessionId,
+
+      tabViolations,
+
+      focusViolations,
+
+      attemptedQuestions,
+    } = req.body;
+
+    const session = await JDPrepSession.findOne({
+      _id: sessionId,
+
+      userId: req.userId,
+    });
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+      });
+    }
+
+    session.status = "ended";
+
+    session.currentStep = "evaluation";
+
+    session.tabViolations = tabViolations;
+
+    session.focusViolations = focusViolations;
+
+    session.questionsAttempted = attemptedQuestions;
+
+    session.completedAt = new Date();
+
+    await session.save();
+
+    res.json({
+      success: true,
+    });
+  } catch (err) {
+    console.log(err);
+
+    res.status(500).json({
+      success: false,
+    });
+  }
+});
+
 // ============================================
 // 3. RECOMMENDATIONS
 // ============================================
@@ -730,7 +789,7 @@ router.post("/recommendations", authMiddleware, async (req, res) => {
     });
     session.learningRecommendations = recommendations;
     session.currentStep = "completed";
-    if (session.status !== "terminated") {
+    if (session.status !== "terminated" && session.status !== "ended") {
       session.status = "completed";
     }
     session.completedAt = new Date();

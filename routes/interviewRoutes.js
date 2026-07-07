@@ -686,16 +686,22 @@ router.post("/complete-session", authMiddleware, async (req, res) => {
 
     //notification
     const user = await User.findById(req.userId);
+    let title = "Interview Completed";
+    let message = `${user.name} completed Technical Interview`;
+
+    if (status === "ended") {
+      title = "Interview Ended";
+      message = `${user.name} ended Technical Interview`;
+    }
+
+    if (status === "terminated") {
+      title = "Interview Terminated";
+      message = `${user.name} interview terminated due to integrity violations`;
+    }
 
     await Notification.create({
-      title:
-        status === "terminated"
-          ? "Interview Terminated"
-          : "Interview Completed",
-      message:
-        status === "terminated"
-          ? `${user.name} interview terminated due to integrity violations`
-          : `${user.name} completed Technical Interview`,
+      title,
+      message,
       type: "interview",
       userId: req.userId,
       entityId: sessionId,
